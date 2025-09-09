@@ -2,7 +2,7 @@
 
 > Built by [Ksschkw](https://github.com/Ksschkw)
 \
-> View at: [PyPi](https://pypi.org/project/kssrag/0.1.1/)
+> View at: [PyPi](https://pypi.org/project/kssrag/0.1.2/)
 
 ![Python Version](https://img.shields.io/badge/python-3.8%2B-blue)
 ![License](https://img.shields.io/badge/license-MIT-green)
