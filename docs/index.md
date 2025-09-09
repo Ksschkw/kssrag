@@ -368,13 +368,13 @@ print(response)
 export OPENROUTER_API_KEY="your_key_here"
 
 # Query documents
-python -m kssrag.cli query --file document.txt --query "Main ideas?"
+python -m kssrag.cli query --file document.txt --system-prompt custom_prompt.txt(`or just insert plain text here in quotes`) --query "Main ideas?"
 
 # Start server
-python -m kssrag.cli server --file document.txt --port 8000
+python -m kssrag.cli server --file document.txt --system-prompt custom_prompt.txt(`or just insert plain text here in quotes`) --port 8000
 
 # With custom vector store
-python -m kssrag.cli query --file document.txt --query "Technical details?" --vector-store faiss
+python -m kssrag.cli query --file document.txt --system-prompt custom_prompt.txt(`or just insert plain text here in quotes`) --query "Technical details?" --vector-store faiss
 ```
 
 ## 🚀 Deployment
@@ -480,7 +480,7 @@ spec:
 **CLI Command Not Found:**
 ```bash
 # Use module syntax
-python -m kssrag.cli query --file document.txt --query "Your question"
+python -m kssrag.cli query --file document.txt --system-prompt custom_prompt.txt(`or just insert plain text here in quotes`) --query "Your question"
 ```
 
 **FAISS Windows Issues:**

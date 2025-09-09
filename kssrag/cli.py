@@ -1,5 +1,6 @@
 import argparse
 import sys
+import os  # Add this import if not already present
 from .utils.document_loaders import load_document, load_json_documents
 from .core.chunkers import TextChunker, JSONChunker, PDFChunker
 from .core.vectorstores import BM25VectorStore, FAISSVectorStore, TFIDFVectorStore, HybridVectorStore, HybridOfflineVectorStore
@@ -24,6 +25,7 @@ def main():
                              choices=["bm25", "faiss", "tfidf", "hybrid_online", "hybrid_offline"], 
                              help="Vector store type")
     query_parser.add_argument("--top-k", type=int, default=config.TOP_K, help="Number of results to retrieve")
+    query_parser.add_argument("--system-prompt", type=str, help="Path to a file containing the system prompt or the prompt text itself")
     
     # Server command
     server_parser = subparsers.add_parser("server", help="Start the RAG API server")
@@ -35,11 +37,22 @@ def main():
                               help="Vector store type")
     server_parser.add_argument("--port", type=int, default=config.SERVER_PORT, help="Port to run server on")
     server_parser.add_argument("--host", type=str, default=config.SERVER_HOST, help="Host to run server on")
+    server_parser.add_argument("--system-prompt", type=str, help="Path to a file containing the system prompt or the prompt text itself")
     
     args = parser.parse_args()
+    vector_store_type = args.vector_store if hasattr(args, 'vector_store') else config.VECTOR_STORE_TYPE
     
     # Validate config
     validate_config()
+    
+    def load_system_prompt(prompt_arg):
+        """Load system prompt from file or use as text"""
+        if not prompt_arg:
+            return None
+        if os.path.exists(prompt_arg):
+            with open(prompt_arg, 'r', encoding='utf-8') as f:
+                return f.read()
+        return prompt_arg
     
     if args.command == "query":
         # Load and process document
@@ -78,7 +91,8 @@ def main():
         # Create retriever and agent
         retriever = SimpleRetriever(vector_store)
         llm = OpenRouterLLM()
-        agent = RAGAgent(retriever, llm)
+        system_prompt = load_system_prompt(args.system_prompt)
+        agent = RAGAgent(retriever, llm, system_prompt=system_prompt)
         
         # Query and print response
         response = agent.query(args.query, top_k=args.top_k)
@@ -122,7 +136,8 @@ def main():
         # Create retriever and agent
         retriever = SimpleRetriever(vector_store)
         llm = OpenRouterLLM()
-        agent = RAGAgent(retriever, llm)
+        system_prompt = load_system_prompt(args.system_prompt)
+        agent = RAGAgent(retriever, llm, system_prompt=system_prompt)
         
         # Create and run server
         from .server import create_app

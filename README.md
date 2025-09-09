@@ -2,7 +2,7 @@
 
 > Built by [Ksschkw](https://github.com/Ksschkw)
 \
-> View at: [PyPi](https://pypi.org/project/kssrag/0.1.0/)
+> View at: [PyPi](https://pypi.org/project/kssrag/0.1.1/)
 
 ![Python Version](https://img.shields.io/badge/python-3.8%2B-blue)
 ![License](https://img.shields.io/badge/license-MIT-green)
@@ -56,10 +56,10 @@ print(response)
 export OPENROUTER_API_KEY="your_key_here"
 
 # Query documents
-python -m kssrag.cli query --file document.txt --query "Main ideas?"
+python -m kssrag.cli query --file document.txt --system-prompt custom_prompt.txt(`or just insert plain text here in quotes`) --query "Main ideas?"
 
 # Start API server
-python -m kssrag.cli server --file document.txt --port 8000
+python -m kssrag.cli server --file document.txt --system-prompt custom_prompt.txt(`or just insert plain text here in quotes`) --port 8000
 ```
 
 ## 🐳 Docker Deployment
@@ -203,7 +203,7 @@ python -m pytest --cov=kssrag tests/
 **CLI Command Not Found**
 ```bash
 # Use module syntax on Windows
-python -m kssrag.cli query --file document.txt --query "Your question"
+python -m kssrag.cli query --file document.txt --system-prompt custom_prompt.txt(`or just insert plain text here in quotes`) --query "Your question"
 ```
 
 **FAISS Windows Issues**

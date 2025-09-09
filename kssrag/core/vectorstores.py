@@ -13,6 +13,13 @@ from typing import List, Dict, Any, Optional
 from ..utils.helpers import logger
 from ..config import config
 
+FAISS_AVAILABLE = False
+try:
+    import faiss
+    FAISS_AVAILABLE = True
+except ImportError:
+    pass
+
 class BaseVectorStore:
     """Base class for vector stores"""
     
@@ -104,6 +111,8 @@ class BM25VectorStore(BaseVectorStore):
 import tempfile
 class FAISSVectorStore(BaseVectorStore):
     def __init__(self, persist_path: Optional[str] = None, model_name: Optional[str] = None):
+        if not FAISS_AVAILABLE:
+            raise ImportError("FAISS is not available. Please install it with 'pip install faiss-cpu' or use a different vector store.")
         super().__init__(persist_path)
         self.model_name = model_name or config.FAISS_MODEL_NAME
         
