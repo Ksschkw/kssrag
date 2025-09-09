@@ -1,0 +1,95 @@
+Ksschkw/README.md
+👋 Hi there!
+SOFTWARE ENGINEER
+I'm Kosisochukwu - an AI/ML enthusiast and web tinkerer from Earth
+
+🔧 Tech Playground
+Languages: Python (my love 💻), Rust?, HTML/CSS, JavaScript, AI Buddies 🤖
+Currently Exploring: Cloud engineering, Reinforcement and Transfer Learning fundamentals(ML stuff)
+Tools: GitHub, VS Code, Colab, AWS
+🌱 Growing Through
+Public repositories (learning in the open!)
+Hackathons
+Cloud Platforms: AWS (deepening knowledge and practical application)
+🎮 Off-Duty
+🧩
+🧠
+📺
+GitHub Stats Top Langs
+
+📬 Reach Me
+Email Twitter Portfolio WhatsApp RAG Agent
+
+🏆 Badges / Certifications(Online)
+AWS Partner: Technical Accredited AWS-Cloud-Quest-Cloud Practitioner
+
+View my complete Credly profile here.
+
+PinnedLoading
+ MYRAGAGENT Public
+My RAG Agent. . a fitting description.
+
+ Python  2
+
+ TheBubbleSnitchBot-2 Public
+A Telegram bot for analyzing crypto tokens using Bubblemaps data. Generates bubble maps, provides market insights, and risk assessments.
+
+ Python  1  3
+
+ AI-Copilot-Agent Public
+A FastAPI-based AI Copilot Agent for defining structured innovation and development challenges on platforms like Topcoder, Kaggle, etc. Powered by LangGraph (`mainv2.py`) and OpenRouter, it feature…
+
+ HTML
+
+ GRPGHT Public
+FPS Gaming Even website
+
+ HTML
+
+ LexAI Public
+
+ Python  1
+
+ ScrapeddashiiAlchemy Public
+
+ Jupyter Notebook
+
+563 contributions in the last year
+Skip to contributions year list
+Contribution Graph
+Day of Week	SeptemberSep	OctoberOct	NovemberNov	DecemberDec	JanuaryJan	FebruaryFeb	MarchMar	AprilApr	MayMay	JuneJun	JulyJul	AugustAug
+SundaySun																																																					
+MondayMon																																																					
+TuesdayTue																																																					
+WednesdayWed																																																					
+ThursdayThu																																																					
+FridayFri																																																					
+SaturdaySat																																																					
+Learn how we count contributions
+Less
+No contributions.
+Low contributions.
+Medium-low contributions.
+Medium-high contributions.
+High contributions.
+More
+ @MyHI2025
+Activity overview
+Contributed to Ksschkw/vybe-telegram-bot, Ksschkw/TheBubbleSnitchBot, Ksschkw/TheBubbleSnitchBot-2 and 45 other repositories
+Loading
+ 
+Code review
+ 
+Issues
+1%
+Pull requests
+99%
+Commits
+Contribution activity
+September 2025
+MyHI2025/20250902_myhealthintegralrag... 9 commits
+Ksschkw/MYRAGAGENT 1 commit
+Joined the MHI organization
+on Sep 6
+@MyHI2025
+MHI
