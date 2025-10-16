@@ -2,8 +2,8 @@ import argparse
 import sys
 import os  # Add this import if not already present
 from .utils.document_loaders import load_document, load_json_documents
-from .core.chunkers import TextChunker, JSONChunker, PDFChunker
-from .core.vectorstores import BM25VectorStore, FAISSVectorStore, TFIDFVectorStore, HybridVectorStore, HybridOfflineVectorStore
+from .core.chunkers import ImageChunker, TextChunker, JSONChunker, PDFChunker
+from .core.vectorstores import BM25SVectorStore, BM25VectorStore, FAISSVectorStore, TFIDFVectorStore, HybridVectorStore, HybridOfflineVectorStore
 from .core.retrievers import SimpleRetriever, HybridRetriever
 from .core.agents import RAGAgent
 from .models.openrouter import OpenRouterLLM
@@ -19,22 +19,29 @@ def main():
     query_parser = subparsers.add_parser("query", help="Query the RAG system")
     query_parser.add_argument("--file", type=str, required=True, help="Path to document file")
     query_parser.add_argument("--query", type=str, required=True, help="Query to ask")
-    query_parser.add_argument("--format", type=str, default="text", choices=["text", "json", "pdf"], 
-                             help="Document format")
+    query_parser.add_argument("--format", type=str, default="text", 
+                         choices=["text", "json", "pdf", "image"],
+                         help="Document format")
     query_parser.add_argument("--vector-store", type=str, default=config.VECTOR_STORE_TYPE,
-                             choices=["bm25", "faiss", "tfidf", "hybrid_online", "hybrid_offline"], 
-                             help="Vector store type")
+                         choices=["bm25", "bm25s", "faiss", "tfidf", "hybrid_online", "hybrid_offline"],
+                         help="Vector store type")
+    query_parser.add_argument("--stream", action="store_true",
+                         help="Enable streaming response")
     query_parser.add_argument("--top-k", type=int, default=config.TOP_K, help="Number of results to retrieve")
     query_parser.add_argument("--system-prompt", type=str, help="Path to a file containing the system prompt or the prompt text itself")
+    query_parser.add_argument("--ocr-mode", type=str, choices=["typed", "handwritten"], 
+                         default=config.OCR_DEFAULT_MODE,
+                         help="OCR mode for image processing")
     
     # Server command
     server_parser = subparsers.add_parser("server", help="Start the RAG API server")
     server_parser.add_argument("--file", type=str, required=True, help="Path to document file")
     server_parser.add_argument("--format", type=str, default="text", choices=["text", "json", "pdf"], 
                               help="Document format")
+    # I Updated the server parser vector store choices
     server_parser.add_argument("--vector-store", type=str, default=config.VECTOR_STORE_TYPE,
-                              choices=["bm25", "faiss", "tfidf", "hybrid_online", "hybrid_offline"], 
-                              help="Vector store type")
+                            choices=["bm25", "bm25s", "faiss", "tfidf", "hybrid_online", "hybrid_offline"],  # Add bm25s
+                            help="Vector store type")
     server_parser.add_argument("--port", type=int, default=config.SERVER_PORT, help="Port to run server on")
     server_parser.add_argument("--host", type=str, default=config.SERVER_HOST, help="Host to run server on")
     server_parser.add_argument("--system-prompt", type=str, help="Path to a file containing the system prompt or the prompt text itself")
@@ -53,10 +60,18 @@ def main():
             with open(prompt_arg, 'r', encoding='utf-8') as f:
                 return f.read()
         return prompt_arg
+        
     
     if args.command == "query":
         # Load and process document
-        if args.format == "text":
+        if args.format == "image":
+            chunker = ImageChunker(
+                chunk_size=config.CHUNK_SIZE, 
+                overlap=config.CHUNK_OVERLAP,
+                ocr_mode=args.ocr_mode
+            )
+            documents = chunker.chunk(args.file, {"source": args.file})
+        elif args.format == "text":
             content = load_document(args.file)
             chunker = TextChunker(chunk_size=config.CHUNK_SIZE, overlap=config.CHUNK_OVERLAP)
             documents = chunker.chunk(content, {"source": args.file})
@@ -82,6 +97,8 @@ def main():
             vector_store = HybridVectorStore()
         elif args.vector_store == "hybrid_offline":
             vector_store = HybridOfflineVectorStore()
+        elif args.vector_store == "bm25s":
+            vector_store = BM25SVectorStore()
         else:
             logger.error(f"Unsupported vector store: {args.vector_store}")
             return 1
@@ -95,9 +112,30 @@ def main():
         agent = RAGAgent(retriever, llm, system_prompt=system_prompt)
         
         # Query and print response
-        response = agent.query(args.query, top_k=args.top_k)
-        print(f"Query: {args.query}")
-        print(f"Response: {response}")
+        # response = agent.query(args.query, top_k=args.top_k)
+        # print(f"Query: {args.query}")
+        # print(f"Response: {response}")
+
+        # In the query section, after creating the agent:
+        if args.stream:
+            print(f"Query: {args.query}")
+            print("Response: ", end="", flush=True)
+            
+            try:
+                # Collect all chunks and print them as they come
+                full_response = ""
+                for chunk in agent.query_stream(args.query, top_k=args.top_k):
+                    print(chunk, end="", flush=True)
+                    full_response += chunk
+                print()  # New line at the end
+                
+                # The response is already added to conversation in query_stream
+            except Exception as e:
+                print(f"\nError during streaming: {str(e)}")
+        else:
+            response = agent.query(args.query, top_k=args.top_k)
+            print(f"Query: {args.query}")
+            print(f"Response: {response}")
         
     elif args.command == "server":
         # Load and process document
@@ -127,6 +165,8 @@ def main():
             vector_store = HybridVectorStore()
         elif args.vector_store == "hybrid_offline":
             vector_store = HybridOfflineVectorStore()
+        elif args.vector_store == "bm25s":
+            vector_store = BM25SVectorStore()
         else:
             logger.error(f"Unsupported vector store: {args.vector_store}")
             return 1

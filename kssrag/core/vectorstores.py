@@ -109,13 +109,23 @@ class BM25VectorStore(BaseVectorStore):
             logger.info(f"BM25 index loaded from {self.persist_path}")
 
 import tempfile
+# class FAISSVectorStore(BaseVectorStore):
+#     def __init__(self, persist_path: Optional[str] = None, model_name: Optional[str] = None):
+#         if not FAISS_AVAILABLE:
+#             raise ImportError("FAISS is not available. Please install it with 'pip install faiss-cpu' or use a different vector store.")
+#         super().__init__(persist_path)
+#         self.model_name = model_name or config.FAISS_MODEL_NAME
 class FAISSVectorStore(BaseVectorStore):
     def __init__(self, persist_path: Optional[str] = None, model_name: Optional[str] = None):
-        if not FAISS_AVAILABLE:
+        # Only setup FAISS when this vector store is actually used
+        from ..utils.helpers import setup_faiss
+        faiss_available, _ = setup_faiss("faiss")  # Explicitly request FAISS
+        
+        if not faiss_available:
             raise ImportError("FAISS is not available. Please install it with 'pip install faiss-cpu' or use a different vector store.")
+        
         super().__init__(persist_path)
         self.model_name = model_name or config.FAISS_MODEL_NAME
-        
         # Handle cache directory permissions
         try:
             cache_dir = config.CACHE_DIR
@@ -404,3 +414,85 @@ class HybridOfflineVectorStore(BaseVectorStore):
         self.tfidf_store.load()
         self.documents = self.bm25_store.documents
         logger.info(f"Hybrid offline index loaded")
+
+import bm25s
+from Stemmer import Stemmer
+
+class BM25SVectorStore(BaseVectorStore):
+    """BM25S vector store using the bm25s library for ultra-fast retrieval"""
+    
+    def __init__(self, persist_path: Optional[str] = "bm25s_index.pkl"):
+        super().__init__(persist_path)
+        self.bm25_retriever = None
+        self.stemmer = Stemmer("english")
+        self.corpus_tokens = None
+    
+    def add_documents(self, documents: List[Dict[str, Any]]):
+        self.documents = documents
+        self.doc_texts = [doc["content"] for doc in documents]
+        
+        try:
+            # Tokenize corpus with BM25S
+            self.corpus_tokens = bm25s.tokenize(
+                self.doc_texts, 
+                stopwords="en", 
+                stemmer=self.stemmer
+            )
+            
+            # Create and index with BM25S
+            self.bm25_retriever = bm25s.BM25()
+            self.bm25_retriever.index(self.corpus_tokens)
+            
+            logger.info(f"BM25S index created with {len(self.documents)} documents")
+            
+        except Exception as e:
+            logger.error(f"BM25S initialization failed: {str(e)}")
+            raise
+    
+    def retrieve(self, query: str, top_k: int = 5) -> List[Dict[str, Any]]:
+        if not self.bm25_retriever:
+            raise ValueError("BM25S index not initialized. Call add_documents first.")
+        
+        try:
+            # Tokenize query with BM25S
+            query_tokens = bm25s.tokenize([query], stemmer=self.stemmer)
+            
+            # Retrieve with BM25S
+            results, scores = self.bm25_retriever.retrieve(query_tokens, k=top_k)
+            
+            # Format results
+            retrieved_docs = []
+            for i in range(results.shape[1]):
+                doc_idx = results[0, i]
+                score = scores[0, i]
+                
+                if doc_idx < len(self.documents):
+                    retrieved_docs.append(self.documents[doc_idx])
+            
+            logger.info(f"BM25S retrieved {len(retrieved_docs)} documents for query: {query}")
+            return retrieved_docs
+            
+        except Exception as e:
+            logger.error(f"BM25S retrieval failed for query '{query}': {str(e)}")
+            return []
+    
+    def persist(self):
+        if self.persist_path:
+            with open(self.persist_path, 'wb') as f:
+                pickle.dump({
+                    'documents': self.documents,
+                    'doc_texts': self.doc_texts,
+                    'corpus_tokens': self.corpus_tokens,
+                    'bm25_retriever': self.bm25_retriever
+                }, f)
+            logger.info(f"BM25S index persisted to {self.persist_path}")
+    
+    def load(self):
+        if self.persist_path and os.path.exists(self.persist_path):
+            with open(self.persist_path, 'rb') as f:
+                data = pickle.load(f)
+                self.documents = data['documents']
+                self.doc_texts = data['doc_texts']
+                self.corpus_tokens = data['corpus_tokens']
+                self.bm25_retriever = data['bm25_retriever']
+            logger.info(f"BM25S index loaded from {self.persist_path}")

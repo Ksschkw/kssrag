@@ -13,3 +13,13 @@ python-multipart>=0.0.6
 pypdf>=3.0.0
 scikit-learn>=1.0.0
 scipy>=1.7.0
+# For OCR functionality
+paddleocr
+Pillow
+paddlepaddle
+# For handling .docx files
+python-docx
+# For bm25S
+bm25S
+pystemmer
+stemmer

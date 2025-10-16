@@ -8,15 +8,23 @@ logging.basicConfig(
 )
 logger = logging.getLogger("KSSRAG")
 
+# Initialize as None - will be set when actually needed
+FAISS_AVAILABLE = None
+FAISS_AVX_TYPE = None
 
-def setup_faiss():
-    """Handle FAISS initialization with proper error handling and fallbacks"""
-    faiss_available = False
-    faiss_avx_type = "standard"
+def setup_faiss(vector_store_type: str = None):
+    """Handle FAISS initialization - only when explicitly called"""
+    global FAISS_AVAILABLE, FAISS_AVX_TYPE
     
-    # Only try to import FAISS if it's actually needed
-    from ..config import config
-    if config.VECTOR_STORE_TYPE in ["faiss", "hybrid_online"]:
+    # If already initialized, return cached values
+    if FAISS_AVAILABLE is not None:
+        return FAISS_AVAILABLE, FAISS_AVX_TYPE
+    
+    faiss_available = False
+    faiss_avx_type = "not_loaded"
+    
+    # Only load FAISS if explicitly using FAISS-based stores
+    if vector_store_type in ["faiss", "hybrid_online"]:
         try:
             # Try different FAISS versions in order of preference
             faiss_import_attempts = [
@@ -29,8 +37,6 @@ def setup_faiss():
             for avx_type, import_path in faiss_import_attempts:
                 try:
                     logger.info(f"Loading faiss with {avx_type} support.")
-                    # Dynamic import
-                    import importlib
                     faiss_module = importlib.import_module(import_path)
                     # Make the FAISS symbols available globally
                     globals().update({name: getattr(faiss_module, name) for name in dir(faiss_module) if not name.startswith('_')})
@@ -41,7 +47,7 @@ def setup_faiss():
                     break
                     
                 except ImportError as e:
-                    logger.info(f"Could not load library with {avx_type} support due to: {repr(e)}")
+                    logger.debug(f"Could not load library with {avx_type} support: {e}")
                     continue
                     
             if not faiss_available:
@@ -50,29 +56,33 @@ def setup_faiss():
         except Exception as e:
             logger.error(f"Failed to initialize FAISS: {str(e)}")
             faiss_available = False
+    else:
+        # Not using FAISS, don't load it
+        logger.debug(f"Skipping FAISS initialization for vector store: {vector_store_type}")
+    
+    # Cache the results
+    FAISS_AVAILABLE = faiss_available
+    FAISS_AVX_TYPE = faiss_avx_type
     
     return faiss_available, faiss_avx_type
 
-# Initialize FAISS only when needed
-FAISS_AVAILABLE, FAISS_AVX_TYPE = setup_faiss()
+def validate_config():
+    """Validate the configuration - don't auto-load FAISS here"""
+    try:
+        from ..config import config
+        
+        if not config.OPENROUTER_API_KEY:
+            logger.warning("OPENROUTER_API_KEY not set. LLM functionality will not work.")
+        
+        # Don't auto-load FAISS here - let the vector stores handle it
+        return True
+    except ImportError:
+        # Config not available, continue anyway
+        return True
 
 # Your signature in the code
 def kss_signature():
     return "Built with HATE by Ksschkw (github.com/Ksschkw)"
-
-def validate_config():
-    """Validate the configuration"""
-    from ..config import config
-    
-    if not config.OPENROUTER_API_KEY:
-        logger.warning("OPENROUTER_API_KEY not set. LLM functionality will not work.")
-    
-    if config.VECTOR_STORE_TYPE in ["faiss", "hybrid_online"] and not FAISS_AVAILABLE:
-        logger.warning(f"FAISS not available. Falling back to HYBRID_OFFLINE vector store.")
-        config.VECTOR_STORE_TYPE = "hybrid_offline"
-        
-    return True
-
 
 def import_custom_component(import_path: str):
     """Import a custom component from a string path"""
@@ -83,3 +93,6 @@ def import_custom_component(import_path: str):
     except (ImportError, AttributeError, ValueError) as e:
         logger.error(f"Failed to import custom component {import_path}: {str(e)}")
         raise
+
+# Remove the auto-initialization at module level
+# FAISS will now only load when explicitly called by vector stores that need it

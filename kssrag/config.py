@@ -9,6 +9,7 @@ load_dotenv()
 
 class VectorStoreType(str, Enum):
     BM25 = "bm25"
+    BM25S = "bm25s"
     FAISS = "faiss"
     TFIDF = "tfidf"
     HYBRID_ONLINE = "hybrid_online"
@@ -19,6 +20,7 @@ class ChunkerType(str, Enum):
     TEXT = "text"
     JSON = "json"
     PDF = "pdf"
+    IMAGE = "image"
     CUSTOM = "custom"
 
 class RetrieverType(str, Enum):
@@ -36,7 +38,7 @@ class Config(BaseSettings):
     )
     
     DEFAULT_MODEL: str = Field(
-        default=os.getenv("DEFAULT_MODEL", "deepseek/deepseek-chat-v3.1:free"),
+        default=os.getenv("DEFAULT_MODEL", "deepseek/deepseek-chat"),
         description="Default model to use for LLM responses"
     )
     
@@ -183,6 +185,18 @@ class Config(BaseSettings):
         env_file = ".env"
         case_sensitive = False
         use_enum_values = True
+
+    # OCR settings
+    OCR_DEFAULT_MODE: str = Field(
+        default=os.getenv("OCR_DEFAULT_MODE", "typed"),
+        description="Default OCR mode: typed or handwritten"
+    )
+    
+    # Streaming settings
+    ENABLE_STREAMING: bool = Field(
+        default=os.getenv("ENABLE_STREAMING", "False").lower() == "true",
+        description="Whether to enable streaming responses"
+    )
         
     @validator('FALLBACK_MODELS', 'CORS_ORIGINS', 'CORS_ALLOW_METHODS', 'CORS_ALLOW_HEADERS', pre=True)
     def split_string(cls, v):

@@ -6,7 +6,7 @@ long_description = (here / "README.md").read_text(encoding="utf-8")
 
 setup(
     name="kssrag",
-    version="0.1.2",
+    version="0.1.34",
     description="A flexible Retrieval-Augmented Generation framework by Ksschkw",
     long_description=long_description,
     long_description_content_type="text/markdown",
@@ -46,12 +46,30 @@ setup(
         "pypdf>=3.0.0",
         "scikit-learn>=1.0.0",
         "scipy>=1.7.0",
+        "bm25s>=0.2.14",  # Add bm25s
+        "stemmer>=0.0.4",
+        "pystemmer>=3.0.0",
+        "python-docx>=1.1.0",
+        "openpyxl>=3.1.0", 
+        "python-pptx>=0.6.23",
     ],
 
     extras_require={
         "dev": ["pytest", "black", "flake8", "mypy"],
         "gpu": ["faiss-gpu>=1.7.0"],
-        "all": ["faiss-gpu>=1.7.0", "sentence-transformers[gpu]"]
+        "all": ["faiss-gpu>=1.7.0", "sentence-transformers[gpu]"],
+
+        'ocr': [
+        'paddleocr>=2.7.0',
+        'paddlepaddle>=2.5.0', 
+        'pytesseract>=0.3.10',
+        'Pillow>=10.0.0',
+        'opencv-python>=4.8.0'
+        ],
+        'faiss': [
+            'faiss-cpu>=1.7.0; sys_platform != "win32"',
+            'faiss-cpu-win; sys_platform == "win32"'
+        ]
     },
     entry_points={
         "console_scripts": [

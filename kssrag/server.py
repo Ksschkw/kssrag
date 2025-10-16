@@ -1,8 +1,12 @@
 from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import StreamingResponse
 from pydantic import BaseModel
 from typing import Dict, Any, Optional, List
 import uuid
+import json
+
+from kssrag.models.openrouter import OpenRouterLLM
 
 from .core.agents import RAGAgent
 from .utils.helpers import logger
@@ -11,6 +15,10 @@ from .config import config
 class QueryRequest(BaseModel):
     query: str
     session_id: Optional[str] = None
+
+class StreamResponse(BaseModel):
+    chunk: str
+    done: bool = False
 
 class ServerConfig(BaseModel):
     """Configuration for the FastAPI server"""
@@ -80,6 +88,47 @@ def create_app(rag_agent: RAGAgent, server_config: Optional[ServerConfig] = None
             logger.error(f"Error handling query: {str(e)}")
             raise HTTPException(status_code=500, detail=f"Error: {str(e)}")
     
+    @app.post("/stream")
+    async def stream_query(request: QueryRequest):
+        """Streaming query endpoint with Server-Sent Events"""
+        query = request.query
+        session_id = request.session_id or str(uuid.uuid4())
+        
+        if not query.strip():
+            raise HTTPException(status_code=400, detail="Query cannot be empty")
+        
+        try:
+            if session_id not in sessions:
+                sessions[session_id] = RAGAgent(
+                    retriever=rag_agent.retriever,
+                    llm=OpenRouterLLM(stream=True),
+                    system_prompt=rag_agent.system_prompt
+                )
+            
+            agent = sessions[session_id]
+            
+            async def generate():
+                try:
+                    for chunk in agent.llm.predict_stream(agent._build_messages(query)):
+                        yield f"data: {json.dumps({'chunk': chunk, 'done': False})}\n\n"
+                    yield f"data: {json.dumps({'chunk': '', 'done': True})}\n\n"
+                except Exception as e:
+                    logger.error(f"Streaming error: {str(e)}")
+                    yield f"data: {json.dumps({'error': str(e), 'done': True})}\n\n"
+            
+            return StreamingResponse(
+                generate(), 
+                media_type="text/plain",
+                headers={
+                    "Cache-Control": "no-cache",
+                    "Connection": "keep-alive",
+                }
+            )
+            
+        except Exception as e:
+            logger.error(f"Streaming query failed: {str(e)}")
+            raise HTTPException(status_code=500, detail=f"Streaming error: {str(e)}")
+
     @app.get("/health")
     async def health_check():
         """Health check endpoint"""

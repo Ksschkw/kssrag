@@ -1,4 +1,4 @@
-from typing import List, Dict, Any, Optional
+from typing import Generator, List, Dict, Any, Optional
 from ..utils.helpers import logger
 
 class RAGAgent:
@@ -29,6 +29,32 @@ class RAGAgent:
             # Keep the most recent messages
             self.conversation = [system_msg] + other_msgs[-9:] if system_msg else other_msgs[-10:]
     
+    def _build_context(self, context_docs: List[Dict[str, Any]]) -> str:
+        """Build context string from documents"""
+        if not context_docs:
+            return ""
+        
+        context = "Relevant information:\n"
+        for i, doc in enumerate(context_docs, 1):
+            context += f"\n--- Document {i} ---\n{doc['content']}\n"
+        return context
+    
+    def _build_messages(self, question: str, context: str = "") -> List[Dict[str, str]]:
+        """Build messages for LLM including context"""
+        # Start with conversation history
+        messages = self.conversation.copy()
+        
+        # Add user query with context
+        user_message = f"{context}\n\nQuestion: {question}" if context else question
+        
+        # Replace the last user message if it exists, otherwise add new one
+        if messages and messages[-1]["role"] == "user":
+            messages[-1]["content"] = user_message
+        else:
+            messages.append({"role": "user", "content": user_message})
+        
+        return messages
+    
     def query(self, question: str, top_k: int = 5, include_context: bool = True) -> str:
         """Process a query and return a response"""
         try:
@@ -40,18 +66,13 @@ class RAGAgent:
                 return "I couldn't find relevant information to answer your question."
             
             # Format context
-            context = ""
-            if include_context and context_docs:
-                context = "Relevant information:\n"
-                for i, doc in enumerate(context_docs, 1):
-                    context += f"\n--- Document {i} ---\n{doc['content']}\n"
+            context = self._build_context(context_docs) if include_context and context_docs else ""
             
-            # Add user query with context
-            user_message = f"{context}\n\nQuestion: {question}" if context else question
-            self.add_message("user", user_message)
+            # Build messages
+            messages = self._build_messages(question, context)
             
             # Generate response
-            response = self.llm.predict(self.conversation)
+            response = self.llm.predict(messages)
             
             # Add assistant response to conversation
             self.add_message("assistant", response)
@@ -61,6 +82,36 @@ class RAGAgent:
         except Exception as e:
             logger.error(f"Error processing query: {str(e)}")
             return "I encountered an issue processing your query. Please try again."
+    
+    def query_stream(self, question: str, top_k: int = 5) -> Generator[str, None, None]:
+        """Query the RAG system with streaming response"""
+        try:
+            # Retrieve relevant documents
+            relevant_docs = self.retriever.retrieve(question, top_k=top_k)
+            
+            # Build context from documents
+            context = self._build_context(relevant_docs)
+            
+            # Build messages
+            messages = self._build_messages(question, context)
+            
+            # Stream response from LLM
+            if hasattr(self.llm, 'predict_stream'):
+                for chunk in self.llm.predict_stream(messages):
+                    yield chunk
+                
+                # Add the complete response to conversation history
+                full_response = "".join([chunk for chunk in self.llm.predict_stream(messages)])
+                self.add_message("assistant", full_response)
+            else:
+                # Fallback to non-streaming
+                response = self.llm.predict(messages)
+                self.add_message("assistant", response)
+                yield response
+                
+        except Exception as e:
+            logger.error(f"Error in streaming query: {str(e)}")
+            yield f"Error: {str(e)}"
     
     def clear_conversation(self):
         """Clear conversation history except system message"""
