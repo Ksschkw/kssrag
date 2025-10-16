@@ -6,7 +6,7 @@ long_description = (here / "README.md").read_text(encoding="utf-8")
 
 setup(
     name="kssrag",
-    version="0.1.34",
+    version="0.2.0",
     description="A flexible Retrieval-Augmented Generation framework by Ksschkw",
     long_description=long_description,
     long_description_content_type="text/markdown",
@@ -50,8 +50,8 @@ setup(
         "stemmer>=0.0.4",
         "pystemmer>=3.0.0",
         "python-docx>=1.1.0",
-        "openpyxl>=3.1.0", 
-        "python-pptx>=0.6.23",
+        "openpyxl>=3.1.5", 
+        "python-pptx>=1.0.2",
     ],
 
     extras_require={
@@ -65,6 +65,11 @@ setup(
         'pytesseract>=0.3.10',
         'Pillow>=10.0.0',
         'opencv-python>=4.8.0'
+        ],
+        'office': [
+        'python-docx>=1.1.0',
+        'openpyxl>=3.1.0',
+        'python-pptx>=0.6.23',
         ],
         'faiss': [
             'faiss-cpu>=1.7.0; sys_platform != "win32"',

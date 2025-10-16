@@ -1,5 +1,6 @@
 import json
 import re
+import os
 from typing import List, Dict, Any, Optional
 import pypdf
 from ..utils.helpers import logger
@@ -53,7 +54,7 @@ class TextChunker(BaseChunker):
         return chunks
 
 class JSONChunker(BaseChunker):
-    """Chunker for JSON documents (like your drug data)"""
+    """Chunker for JSON documents"""
     
     def chunk(self, data: List[Dict[str, Any]], metadata_field: str = "name") -> List[Dict[str, Any]]:
         """Create chunks from JSON data"""
@@ -105,9 +106,9 @@ class PDFChunker(TextChunker):
         """Extract text from PDF and chunk it"""
         text = self.extract_text(pdf_path)
         return self.chunk(text, metadata)
-    
+
 class ImageChunker(BaseChunker):
-    """Chunker for image documents using OCR with PaddleOCR and Tesseract"""
+    """Chunker for image documents using OCR"""
     
     def __init__(self, chunk_size: int = 500, overlap: int = 50, ocr_mode: str = "typed"):
         super().__init__(chunk_size, overlap)
@@ -177,3 +178,17 @@ class ImageChunker(BaseChunker):
         
         logger.info(f"Created {len(chunks)} chunks from image {image_path}")
         return chunks
+
+class OfficeChunker(TextChunker):
+    """Chunker for Office documents (DOCX, Excel, PowerPoint)"""
+    
+    def chunk_office(self, file_path: str, metadata: Optional[Dict[str, Any]] = None) -> List[Dict[str, Any]]:
+        """Chunk office documents by extracting text first"""
+        if metadata is None:
+            metadata = {}
+        
+        # Extract text based on file type
+        from ..utils.document_loaders import load_document
+        text = load_document(file_path)
+        
+        return self.chunk(text, metadata)

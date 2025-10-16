@@ -2,7 +2,7 @@ import argparse
 import sys
 import os  # Add this import if not already present
 from .utils.document_loaders import load_document, load_json_documents
-from .core.chunkers import ImageChunker, TextChunker, JSONChunker, PDFChunker
+from .core.chunkers import ImageChunker, OfficeChunker, TextChunker, JSONChunker, PDFChunker
 from .core.vectorstores import BM25SVectorStore, BM25VectorStore, FAISSVectorStore, TFIDFVectorStore, HybridVectorStore, HybridOfflineVectorStore
 from .core.retrievers import SimpleRetriever, HybridRetriever
 from .core.agents import RAGAgent
@@ -20,7 +20,7 @@ def main():
     query_parser.add_argument("--file", type=str, required=True, help="Path to document file")
     query_parser.add_argument("--query", type=str, required=True, help="Query to ask")
     query_parser.add_argument("--format", type=str, default="text", 
-                         choices=["text", "json", "pdf", "image"],
+                         choices=["text", "json", "pdf", "image", "docx", "excel", "pptx"],
                          help="Document format")
     query_parser.add_argument("--vector-store", type=str, default=config.VECTOR_STORE_TYPE,
                          choices=["bm25", "bm25s", "faiss", "tfidf", "hybrid_online", "hybrid_offline"],
@@ -36,8 +36,9 @@ def main():
     # Server command
     server_parser = subparsers.add_parser("server", help="Start the RAG API server")
     server_parser.add_argument("--file", type=str, required=True, help="Path to document file")
-    server_parser.add_argument("--format", type=str, default="text", choices=["text", "json", "pdf"], 
-                              help="Document format")
+    server_parser.add_argument("--format", type=str, default="text", 
+                          choices=["text", "json", "pdf", "image", "docx", "excel", "pptx"],
+                          help="Document format")
     # I Updated the server parser vector store choices
     server_parser.add_argument("--vector-store", type=str, default=config.VECTOR_STORE_TYPE,
                             choices=["bm25", "bm25s", "faiss", "tfidf", "hybrid_online", "hybrid_offline"],  # Add bm25s
@@ -64,14 +65,7 @@ def main():
     
     if args.command == "query":
         # Load and process document
-        if args.format == "image":
-            chunker = ImageChunker(
-                chunk_size=config.CHUNK_SIZE, 
-                overlap=config.CHUNK_OVERLAP,
-                ocr_mode=args.ocr_mode
-            )
-            documents = chunker.chunk(args.file, {"source": args.file})
-        elif args.format == "text":
+        if args.format == "text":
             content = load_document(args.file)
             chunker = TextChunker(chunk_size=config.CHUNK_SIZE, overlap=config.CHUNK_OVERLAP)
             documents = chunker.chunk(content, {"source": args.file})
@@ -82,6 +76,17 @@ def main():
         elif args.format == "pdf":
             chunker = PDFChunker(chunk_size=config.CHUNK_SIZE, overlap=config.CHUNK_OVERLAP)
             documents = chunker.chunk_pdf(args.file, {"source": args.file})
+        elif args.format == "image":
+            chunker = ImageChunker(
+                chunk_size=config.CHUNK_SIZE, 
+                overlap=config.CHUNK_OVERLAP,
+                ocr_mode=getattr(args, 'ocr_mode', config.OCR_DEFAULT_MODE)
+            )
+            documents = chunker.chunk(args.file, {"source": args.file})
+        elif args.format in ["docx", "excel", "pptx"]:
+            # Use OfficeChunker for office documents
+            chunker = OfficeChunker(chunk_size=config.CHUNK_SIZE, overlap=config.CHUNK_OVERLAP)
+            documents = chunker.chunk_office(args.file, {"source": args.file})
         else:
             logger.error(f"Unsupported format: {args.format}")
             return 1
