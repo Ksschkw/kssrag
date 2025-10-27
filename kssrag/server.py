@@ -98,27 +98,21 @@ def create_app(rag_agent: RAGAgent, server_config: Optional[ServerConfig] = None
             raise HTTPException(status_code=400, detail="Query cannot be empty")
         
         try:
-            # Get or create session - USE THE SAME LLM INSTANCE
+            # Get or create session
             if session_id not in sessions:
                 logger.info(f"Creating new streaming session: {session_id}")
-                # Use the same LLM configuration but enable streaming
                 sessions[session_id] = RAGAgent(
                     retriever=rag_agent.retriever,
-                    llm=rag_agent.llm,  # Use the same LLM instance
+                    llm=rag_agent.llm,
                     system_prompt=rag_agent.system_prompt
                 )
             
             agent = sessions[session_id]
             
-            # Build messages using agent's conversation history
-            context_docs = agent.retriever.retrieve(query, top_k=5)
-            context = agent._build_context(context_docs)
-            messages = agent._build_messages(query, context)
-            
             async def generate():
                 full_response = ""
                 try:
-                    # Use the agent's query_stream method instead of calling LLM directly
+                    # Use agent's query_stream which handles context and summarization
                     for chunk in agent.query_stream(query, top_k=5):
                         full_response += chunk
                         yield f"data: {json.dumps({'chunk': chunk, 'done': False})}\n\n"
