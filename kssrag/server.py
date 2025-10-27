@@ -28,9 +28,9 @@ class ServerConfig(BaseModel):
     cors_allow_credentials: bool = config.CORS_ALLOW_CREDENTIALS
     cors_allow_methods: List[str] = config.CORS_ALLOW_METHODS
     cors_allow_headers: List[str] = config.CORS_ALLOW_HEADERS
-    title: str = "KSS RAG API"
-    description: str = "A Retrieval-Augmented Generation API by Ksschkw"
-    version: str = "0.1.0"
+    title: str = "KSSSwagger"
+    description: str = "[kssrag](https://github.com/Ksschkw/kssrag)"
+    version: str = "0.2.0"
 
 def create_app(rag_agent: RAGAgent, server_config: Optional[ServerConfig] = None):
     """Create a FastAPI app for the RAG agent with configurable CORS"""
@@ -98,20 +98,33 @@ def create_app(rag_agent: RAGAgent, server_config: Optional[ServerConfig] = None
             raise HTTPException(status_code=400, detail="Query cannot be empty")
         
         try:
+            # Get or create session - USE THE SAME LLM INSTANCE
             if session_id not in sessions:
+                logger.info(f"Creating new streaming session: {session_id}")
+                # Use the same LLM configuration but enable streaming
                 sessions[session_id] = RAGAgent(
                     retriever=rag_agent.retriever,
-                    llm=OpenRouterLLM(stream=True),
+                    llm=rag_agent.llm,  # Use the same LLM instance
                     system_prompt=rag_agent.system_prompt
                 )
             
             agent = sessions[session_id]
             
+            # Build messages using agent's conversation history
+            context_docs = agent.retriever.retrieve(query, top_k=5)
+            context = agent._build_context(context_docs)
+            messages = agent._build_messages(query, context)
+            
             async def generate():
+                full_response = ""
                 try:
-                    for chunk in agent.llm.predict_stream(agent._build_messages(query)):
+                    # Use the agent's query_stream method instead of calling LLM directly
+                    for chunk in agent.query_stream(query, top_k=5):
+                        full_response += chunk
                         yield f"data: {json.dumps({'chunk': chunk, 'done': False})}\n\n"
+                    
                     yield f"data: {json.dumps({'chunk': '', 'done': True})}\n\n"
+                    
                 except Exception as e:
                     logger.error(f"Streaming error: {str(e)}")
                     yield f"data: {json.dumps({'error': str(e), 'done': True})}\n\n"
@@ -156,7 +169,7 @@ def create_app(rag_agent: RAGAgent, server_config: Optional[ServerConfig] = None
     async def root():
         """Root endpoint with API information"""
         return {
-            "message": "Welcome to KSS RAG API",
+            "message": "Welcome to KSSRAG API",
             "version": server_config.version,
             "docs": "/docs",
             "health": "/health"

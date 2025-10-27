@@ -18,7 +18,7 @@ class OpenRouterLLM:
             "Authorization": f"Bearer {self.api_key}",
             "Content-Type": "application/json",
             "HTTP-Referer": "https://github.com/Ksschkw/kssrag",
-            "X-Title": "KSS RAG Agent"
+            "X-Title": "KSSRAG"
         }
     
     def predict(self, messages: List[Dict[str, str]]) -> str:

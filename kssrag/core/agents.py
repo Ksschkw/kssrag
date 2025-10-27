@@ -97,11 +97,12 @@ class RAGAgent:
             
             # Stream response from LLM
             if hasattr(self.llm, 'predict_stream'):
+                full_response = ""
                 for chunk in self.llm.predict_stream(messages):
+                    full_response += chunk
                     yield chunk
                 
                 # Add the complete response to conversation history
-                full_response = "".join([chunk for chunk in self.llm.predict_stream(messages)])
                 self.add_message("assistant", full_response)
             else:
                 # Fallback to non-streaming
