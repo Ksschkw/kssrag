@@ -1,5 +1,7 @@
 # KSS RAG - Knowledge Retrieval Augmented Generation Framework
 
+ISSUE FOUND IN LLM GEN.... fixing when I'm free.
+
 <div align="center">
 
 ![Python Version](https://img.shields.io/badge/python-3.8%2B-blue)
