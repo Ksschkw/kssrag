@@ -1,6 +1,6 @@
 # KSS RAG - Knowledge Retrieval Augmented Generation Framework
 
-ISSUE FOUND IN LLM GEN.... fixing when I'm free.
+ISSUE FOUND IN LLM GEN.... fixing when I'm free heh.
 
 <div align="center">
 
