@@ -728,6 +728,7 @@ kssrag/
 - [**Full Documentation**](https://github.com/Ksschkw/kssrag/docs)
 - [**API Reference**](https://github.com/Ksschkw/kssrag/docs/api_reference.md)
 - [**Examples Directory**](https://github.com/Ksschkw/kssrag/examples)
+- [**PyPi**](https://pypi.org/project/kssrag/0.2.3/)
 
 ### Community
 - [**GitHub Issues**](https://github.com/Ksschkw/kssrag/issues) - Bug reports and feature requests
