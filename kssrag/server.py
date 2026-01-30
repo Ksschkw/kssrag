@@ -125,7 +125,7 @@ def create_app(rag_agent: RAGAgent, server_config: Optional[ServerConfig] = None
             
             return StreamingResponse(
                 generate(), 
-                media_type="text/plain",
+                media_type="text/event-stream",
                 headers={
                     "Cache-Control": "no-cache",
                     "Connection": "keep-alive",

@@ -1,12 +1,10 @@
 # KSS RAG - Knowledge Retrieval Augmented Generation Framework
 
-ISSUE FOUND IN LLM GEN.... fixing when I'm free heh.
-
 <div align="center">
 
 ![Python Version](https://img.shields.io/badge/python-3.8%2B-blue)
 ![License](https://img.shields.io/badge/license-MIT-green)
-![Version](https://img.shields.io/badge/version-0.2.0-brightgreen)
+![Version](https://img.shields.io/badge/version-0.2.3-brightgreen)
 ![Framework](https://img.shields.io/badge/framework-RAG-orange)
 ![Documentation](https://img.shields.io/badge/docs-comprehensive-brightgreen)
 

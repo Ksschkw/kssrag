@@ -21,13 +21,36 @@ class RAGAgent:
         if not any(msg.get("role") == "system" for msg in self.conversation):
             self.add_message("system", self.system_prompt)
     
-    def add_message(self, role: str, content: str):
-        """Add a message to the conversation history"""
-        self.conversation.append({"role": role, "content": content})
+    # def add_message(self, role: str, content: str):
+    #     """Add a message to the conversation history"""
+    #     self.conversation.append({"role": role, "content": content})
         
+    #     # Keep conversation manageable (last 15 messages)
+    #     if len(self.conversation) > 15:
+    #         self._smart_trim_conversation()
+
+    def add_message(self, role: str, content: str):
+        """Add a message to the conversation history (with simple dedupe for assistant)."""
+        content = content.strip()
+        # Prevent adding empty messages
+        if not content:
+            logger.info("Attempted to add empty message – ignored.")
+            return
+
+        # If last message is identical assistant content, skip to avoid duplicates
+        if self.conversation:
+            last = self.conversation[-1]
+            if role == "assistant" and last.get("role") == "assistant":
+                if last.get("content", "").strip() == content:
+                    logger.info("Duplicate assistant message suppressed.")
+                    return
+
+        self.conversation.append({"role": role, "content": content})
+
         # Keep conversation manageable (last 15 messages)
         if len(self.conversation) > 15:
             self._smart_trim_conversation()
+
     
     def _smart_trim_conversation(self):
         """Trim conversation while preserving system message and recent exchanges"""
@@ -123,136 +146,140 @@ class RAGAgent:
     - Focus on user preferences, names, important context
 
     The summary will be automatically hidden from the user."""
-    
+
     # def _extract_summary_and_response(self, full_response: str) -> tuple[str, Optional[str]]:
     #     """Extract summary from response and return clean user response - handles partial markers"""
+    #     # Keep original markers for backward compatibility
     #     summary_start = "[SUMMARY_START]"
     #     summary_end = "[SUMMARY_END]"
         
-    #     # Check if we have complete markers
-    #     if summary_start in full_response and summary_end in full_response:
-    #         start_idx = full_response.find(summary_start) + len(summary_start)
-    #         end_idx = full_response.find(summary_end)
+    #     # NEW: Normalize the response first (improvement from new version)
+    #     normalized = full_response.replace('\n', ' ').replace('\r', ' ').strip()
+        
+    #     # Check if we have complete markers - KEEP original logic but use normalized
+    #     if summary_start in normalized and summary_end in normalized:
+    #         start_idx = normalized.find(summary_start) + len(summary_start)
+    #         end_idx = normalized.find(summary_end)
             
-    #         summary = full_response[start_idx:end_idx].strip()
-    #         user_response = full_response[:full_response.find(summary_start)].strip()
+    #         summary = normalized[start_idx:end_idx].strip()
+    #         user_response = normalized[:normalized.find(summary_start)].strip()
             
     #         logger.info(f"✅ SUCCESS: Summary extracted and separated from user response")
     #         logger.info(f"User response length: {len(user_response)} chars")
     #         logger.info(f"Summary extracted: '{summary}'")
-    #         return user_response, summary
-        
-    #     # Check if we have partial markers (common in streaming)
-    #     elif summary_start in full_response:
-    #         # We have start marker but no end marker - extract what we can
-    #         start_idx = full_response.find(summary_start) + len(summary_start)
-    #         potential_summary = full_response[start_idx:].strip()
             
-    #         # Clean up any partial end markers or weird formatting
-    #         if potential_summary:
-    #             # Remove any trailing partial markers or whitespace
-    #             cleaned_summary = potential_summary.split('[SUMMARY_')[0].split('[SUMMARY')[0].strip()
-    #             user_response = full_response[:full_response.find(summary_start)].strip()
+    #         # NEW: Add validation from improved version
+    #         if not summary or len(summary) < 5:
+    #             logger.info("❌ Summary too short, returning full response")
+    #             return full_response.strip(), None
                 
-    #             if cleaned_summary and len(cleaned_summary) > 10:  # Only if meaningful content
-    #                 logger.info(f"⚠️  Partial summary extracted (missing end marker): '{cleaned_summary}'")
-    #                 return user_response, cleaned_summary
-            
-    #         logger.info("❌ Incomplete summary markers found")
-    #         return full_response, None
-        
-    #     logger.info("❌ No summary markers found, returning full response")
-    #     logger.info(f"Full response length: {len(full_response)} chars")
-    #     return full_response, None
+    #         return user_response, summary
 
     def _extract_summary_and_response(self, full_response: str) -> tuple[str, Optional[str]]:
-        """Extract summary from response and return clean user response - handles partial markers"""
-        # Keep original markers for backward compatibility
+        """Extract summary from response and return clean user response."""
+
+        if not full_response:
+            return "", None
+
         summary_start = "[SUMMARY_START]"
         summary_end = "[SUMMARY_END]"
-        
-        # NEW: Normalize the response first (improvement from new version)
-        normalized = full_response.replace('\n', ' ').replace('\r', ' ').strip()
-        
-        # Check if we have complete markers - KEEP original logic but use normalized
+
+        original = full_response
+        normalized = original.replace('\r\n', '\n').replace('\r', '\n')
+
+        # Case 1: Complete markers
         if summary_start in normalized and summary_end in normalized:
             start_idx = normalized.find(summary_start) + len(summary_start)
             end_idx = normalized.find(summary_end)
-            
             summary = normalized[start_idx:end_idx].strip()
-            user_response = normalized[:normalized.find(summary_start)].strip()
-            
-            logger.info(f"✅ SUCCESS: Summary extracted and separated from user response")
-            logger.info(f"User response length: {len(user_response)} chars")
-            logger.info(f"Summary extracted: '{summary}'")
-            
-            # NEW: Add validation from improved version
+
+            user_response = original.split(summary_start)[0].strip()
+
             if not summary or len(summary) < 5:
-                logger.info("❌ Summary too short, returning full response")
-                return full_response.strip(), None
-                
+                logger.info("Summary too short or invalid")
+                return original.strip(), None
+
+            logger.info("Summary extracted successfully")
             return user_response, summary
-        
-        # Check if we have partial markers (common in streaming) - IMPROVED logic
-        elif summary_start in normalized:
-            # We have start marker but no end marker - extract what we can
+
+        # Case 2: Partial marker (start only)
+        if summary_start in normalized:
             start_idx = normalized.find(summary_start) + len(summary_start)
-            
-            # NEW: Take reasonable chunk (200 chars) instead of everything
-            potential_summary = normalized[start_idx:start_idx+200].strip()
-            
-            # COMBINED: Clean up from both versions
-            if potential_summary:
-                # Clean up any partial markers or weird formatting
-                cleaned_summary = (potential_summary
-                                .split('[SUMMARY_')[0]
-                                .split('[SUMMARY')[0]
-                                .split('[')[0]  # NEW from improved version
-                                .split('\n')[0]  # NEW from improved version
-                                .strip())
-                
-                user_response = normalized[:normalized.find(summary_start)].strip()
-                
-                # COMBINED validation: meaningful content check
-                if cleaned_summary and len(cleaned_summary) >= 10:  # Original threshold
-                    logger.info(f"⚠️  Partial summary extracted (missing end marker): '{cleaned_summary}'")
-                    # NEW: Additional validation
-                    if len(cleaned_summary) >= 5:  # Improved version threshold
-                        return user_response, cleaned_summary
-                
-            logger.info("❌ Incomplete summary markers found")
-            return full_response.strip(), None  # NEW: strip for consistency
-        
+            potential = normalized[start_idx:start_idx + 200].strip()
+
+            cleaned_summary = (
+                potential
+                .split('[SUMMARY_')[0]
+                .split('[SUMMARY')[0]
+                .split('[')[0]
+                .strip()
+            )
+
+            user_response = original.split(summary_start)[0].strip()
+
+            if cleaned_summary and len(cleaned_summary) >= 10:
+                logger.info("Partial summary extracted")
+                return user_response, cleaned_summary
+
+            logger.info("Partial summary invalid")
+            return original.strip(), None
+
+        # Case 3: No markers at all
+        logger.info("No summary markers found")
         # No markers found - KEEP original but with normalization
-        logger.info("❌ No summary markers found, returning full response")
-        logger.info(f"Full response length: {len(full_response)} chars")
-        return full_response.strip(), None  # NEW: strip for consistency
+        # logger.info(" No summary markers found, returning full response")
+        logger.info(f"Full response length: {len(original)} chars")
+        return original.strip(), None
+
+        
+
+        # return full_response.strip(), None  # NEW: strip for consistency
     
+    # def _add_conversation_summary(self, new_summary: str):
+    #     """Add a new discrete conversation summary"""
+    #     if not new_summary or new_summary.lower() == "none":
+    #         logger.info("🔄 No summary to add (empty or 'none')")
+    #         return
+        
+    #     # Add as a new discrete summary
+    #     self.conversation_summaries.append(new_summary)
+    #     logger.info(f"📝 ADDED Summary #{len(self.conversation_summaries)}: '{new_summary}'")
+
+    #     # Keep only recent summaries (last 7)
+    #     if len(self.conversation_summaries) > 7:
+    #         self.conversation_summaries = self.conversation_summaries[-7:]
+    #         removed = self.conversation_summaries.pop(0)
+    #         logger.info(f"🗑️  DROPPED Oldest summary: '{removed}'")
+    #         logger.info(f"📊 Summary count maintained at {len(self.conversation_summaries)}")
+    #     logger.info(f"Added conversation summary #{len(self.conversation_summaries)}: {new_summary}")
     def _add_conversation_summary(self, new_summary: str):
         """Add a new discrete conversation summary"""
         if not new_summary or new_summary.lower() == "none":
-            logger.info("🔄 No summary to add (empty or 'none')")
+            logger.info(" No summary to add (empty or 'none')")
             return
-        
-        # Add as a new discrete summary
+
+        new_summary = new_summary.strip()
+        if not new_summary:
+            logger.info(" No summary to add after strip")
+            return
+
+        # Append new summary
         self.conversation_summaries.append(new_summary)
-        logger.info(f"📝 ADDED Summary #{len(self.conversation_summaries)}: '{new_summary}'")
+        logger.info(f" ADDED Summary #{len(self.conversation_summaries)}: '{new_summary}'")
 
         # Keep only recent summaries (last 7)
         if len(self.conversation_summaries) > 7:
             self.conversation_summaries = self.conversation_summaries[-7:]
-            removed = self.conversation_summaries.pop(0)
-            logger.info(f"🗑️  DROPPED Oldest summary: '{removed}'")
-            logger.info(f"📊 Summary count maintained at {len(self.conversation_summaries)}")
-        logger.info(f"Added conversation summary #{len(self.conversation_summaries)}: {new_summary}")
+            logger.info(f" Summary count trimmed to {len(self.conversation_summaries)}")
+
     
     def query(self, question: str, top_k: int = 5, include_context: bool = True) -> str:
         """Process a query with stealth conversation summarization"""
         try:
             # Retrieve relevant context
-            logger.info(f"🔍 QUERY START: '{question}' (top_k: {top_k})")
+            logger.info(f" QUERY START: '{question}' (top_k: {top_k})")
             context_docs = self.retriever.retrieve(question, top_k)
-            logger.info(f"📄 Retrieved {len(context_docs)} context documents")
+            logger.info(f" Retrieved {len(context_docs)} context documents")
             
             if not context_docs and include_context:
                 logger.warning(f"No context found for query: {question}")
@@ -266,7 +293,7 @@ class RAGAgent:
             
             # Generate response
             full_response = self.llm.predict(messages)
-            logger.info(f"🤖 LLM response received: {len(full_response)} chars")
+            logger.info(f" LLM response received: {len(full_response)} chars")
             
             # Extract summary and clean response
             user_response, conversation_summary = self._extract_summary_and_response(full_response)
@@ -281,12 +308,12 @@ class RAGAgent:
             # Add assistant response to conversation (clean version only)
             self.add_message("assistant", user_response)
             
-            logger.info(f"💬 Final user response: {len(user_response)} chars")
+            logger.info(f" Final user response: {len(user_response)} chars")
             return user_response
             
         except Exception as e:
             logger.error(f"Error processing query: {str(e)}")
-            # logger.error(f"💥 QUERY FAILED: {str(e)}")
+            # logger.error(f" QUERY FAILED: {str(e)}")
             return "I encountered an issue processing your query. Please try again."
     
     def query_stream(self, question: str, top_k: int = 5) -> Generator[str, None, None]:
@@ -294,7 +321,7 @@ class RAGAgent:
         Professional-grade streaming with multiple fallback strategies
         """
         try:
-            logger.info(f"🌊 STREAMING QUERY START: '{question}'")
+            logger.info(f" STREAMING QUERY START: '{question}'")
             
             # Strategy 1: Try true streaming first
             if hasattr(self.llm, 'predict_stream'):
@@ -305,11 +332,11 @@ class RAGAgent:
                     logger.warning(f"Streaming failed, falling back: {stream_error}")
             
             # Strategy 2: Fallback to simulated streaming
-            logger.info("🔄 Falling back to simulated streaming")
+            logger.info(" Falling back to simulated streaming")
             yield from self._simulated_streaming(question, top_k)
             
         except Exception as e:
-            logger.error(f"💥 ALL STREAMING STRATEGIES FAILED: {str(e)}")
+            logger.error(f" ALL STREAMING STRATEGIES FAILED: {str(e)}")
             yield f"Error: {str(e)}"
 
     def _stream_with_summary_protection(self, question: str, top_k: int) -> Generator[str, None, None]:
@@ -328,7 +355,7 @@ class RAGAgent:
                 # Check for summary markers
                 if any(marker in chunk for marker in ['[SUMMARY', 'SUMMARY_']):
                     if not summary_started:
-                        logger.info("🚨 Summary markers detected - cutting stream")
+                        logger.info(" Summary markers detected - cutting stream")
                         summary_started = True
                         clean_part = self._extract_clean_content(buffer)
                         if clean_part:
@@ -346,15 +373,31 @@ class RAGAgent:
             logger.error(f"Streaming error: {e}")
             raise  # Re-raise to trigger fallback
 
+    # def _process_complete_response(self, full_response: str):
+    #     """Process complete response and extract summary"""
+    #     user_response, conversation_summary = self._extract_summary_and_response(full_response)
+        
+    #     if conversation_summary:
+    #         logger.info(f" Summary extracted: '{conversation_summary}'")
+    #         self._add_conversation_summary(conversation_summary)
+        
+    #     self.add_message("assistant", user_response)
     def _process_complete_response(self, full_response: str):
         """Process complete response and extract summary"""
         user_response, conversation_summary = self._extract_summary_and_response(full_response)
-        
+
         if conversation_summary:
-            logger.info(f"📝 Summary extracted: '{conversation_summary}'")
+            logger.info(f" Summary extracted: '{conversation_summary}'")
             self._add_conversation_summary(conversation_summary)
-        
-        self.add_message("assistant", user_response)
+
+        # extra guard: only add assistant message if different from last assistant message
+        if user_response:
+            last = self.conversation[-1] if self.conversation else None
+            if not (last and last.get("role") == "assistant" and last.get("content", "").strip() == user_response.strip()):
+                self.add_message("assistant", user_response)
+            else:
+                logger.info("Skipped adding duplicate assistant message in _process_complete_response.")
+
 
     def _simulated_streaming(self, question: str, top_k: int) -> Generator[str, None, None]:
         """Simulated streaming that guarantees no summary leakage"""
@@ -369,14 +412,14 @@ class RAGAgent:
         user_response, conversation_summary = self._extract_summary_and_response(complete_response)
         
         if conversation_summary:
-            logger.info(f"📝 Summary extracted: '{conversation_summary}'")
+            logger.info(f" Summary extracted: '{conversation_summary}'")
             self._add_conversation_summary(conversation_summary)
         
         self.add_message("assistant", user_response)
         
         # Simulate streaming (smaller chunks for better UX)
         chunk_size = 2  # Even smaller chunks for smoother streaming
-        for i in range(0, len(user_response), chunk_size):
+        for i in range(0, len(user_response), chunk_add_conversation_summary_size):
             yield user_response[i:i+chunk_size]
             import time
             time.sleep(0.02)  # Slightly longer delay for readability
@@ -403,5 +446,5 @@ class RAGAgent:
             "message_count": len(self.conversation),
             "recent_messages": [f"{msg['role']}: {msg['content'][:50]}..." for msg in self.conversation[-3:]]
         }
-        logger.info(f"📊 Context snapshot: {context}")
+        logger.info(f" Context snapshot: {context}")
         return context
