@@ -4,7 +4,7 @@
 
 ![Python Version](https://img.shields.io/badge/python-3.8%2B-blue)
 ![License](https://img.shields.io/badge/license-MIT-green)
-![Version](https://img.shields.io/badge/version-0.2.3-brightgreen)
+![Version](https://img.shields.io/badge/version-0.2.4-brightgreen)
 ![Framework](https://img.shields.io/badge/framework-RAG-orange)
 ![Documentation](https://img.shields.io/badge/docs-comprehensive-brightgreen)
 
@@ -728,7 +728,7 @@ kssrag/
 - [**Full Documentation**](https://github.com/Ksschkw/kssrag/docs)
 - [**API Reference**](https://github.com/Ksschkw/kssrag/docs/api_reference.md)
 - [**Examples Directory**](https://github.com/Ksschkw/kssrag/examples)
-- [**PyPi**](https://pypi.org/project/kssrag/0.2.3/)
+- [**PyPi**](https://pypi.org/project/kssrag/0.2.4/)
 
 ### Community
 - [**GitHub Issues**](https://github.com/Ksschkw/kssrag/issues) - Bug reports and feature requests

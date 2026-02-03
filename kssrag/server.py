@@ -109,19 +109,37 @@ def create_app(rag_agent: RAGAgent, server_config: Optional[ServerConfig] = None
             
             agent = sessions[session_id]
             
+            # async def generate():
+            #     full_response = ""
+            #     try:
+            #         # Use agent's query_stream which handles context and summarization
+            #         for chunk in agent.query_stream(query, top_k=5):
+            #             full_response += chunk
+            #             yield f"data: {json.dumps({'chunk': chunk, 'done': False})}\n\n"
+                    
+            #         yield f"data: {json.dumps({'chunk': '', 'done': True})}\n\n"
+                    
+            #     except Exception as e:
+            #         logger.error(f"Streaming error: {str(e)}")
+            #         yield f"data: {json.dumps({'error': str(e), 'done': True})}\n\n"
+
             async def generate():
-                full_response = ""
                 try:
-                    # Use agent's query_stream which handles context and summarization
-                    for chunk in agent.query_stream(query, top_k=5):
-                        full_response += chunk
-                        yield f"data: {json.dumps({'chunk': chunk, 'done': False})}\n\n"
-                    
+                    # Stream tokens ONLY
+                    for token in agent.query_stream(query, top_k=5):
+                        if not token:
+                            continue
+
+                        yield f"data: {json.dumps({'chunk': token, 'done': False})}\n\n"
+
+                    # Signal completion (no payload)
                     yield f"data: {json.dumps({'chunk': '', 'done': True})}\n\n"
-                    
+
                 except Exception as e:
                     logger.error(f"Streaming error: {str(e)}")
                     yield f"data: {json.dumps({'error': str(e), 'done': True})}\n\n"
+
+
             
             return StreamingResponse(
                 generate(), 
