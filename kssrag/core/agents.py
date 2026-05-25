@@ -164,47 +164,44 @@ class RAGAgent:
         if not full_response:
             return "", None
 
-        summary_start = "[SUMMARY_START]"
-        summary_end = "[SUMMARY_END]"
-
         original = full_response
         normalized = original.replace('\r\n', '\n').replace('\r', '\n')
 
-        # Case 1: Full summary markers
-        if summary_start in normalized and summary_end in normalized:
-            start_idx = normalized.find(summary_start) + len(summary_start)
-            end_idx = normalized.find(summary_end)
-            summary = normalized[start_idx:end_idx].strip()
+        # Find the start of the summary
+        start_idx = -1
+        marker_used = ""
+        for marker in ["[SUMMARY_START]", "[SUMMARY]", "[SUMMARY", "SUMMARY:"]:
+            if marker in normalized:
+                start_idx = normalized.find(marker)
+                marker_used = marker
+                break
 
-            user_response = original.split(summary_start)[0].strip()
+        if start_idx != -1:
+            user_response = normalized[:start_idx].strip()
+            potential = normalized[start_idx + len(marker_used):].strip()
 
-            if not summary or len(summary) < 5:
-                logger.info("Summary too short or invalid – returning full response as user response")
-                return original.strip(), None
+            end_idx = -1
+            for end_marker in ["[SUMMARY_END]", "[/SUMMARY]", "SUMMARY_END]"]:
+                if end_marker in potential:
+                    end_idx = potential.find(end_marker)
+                    break
 
-            return user_response, summary
+            if end_idx != -1:
+                summary = potential[:end_idx].strip()
+            else:
+                summary = potential.strip()
 
-        # Case 2: Partial summary start only
-        if summary_start in normalized:
-            start_idx = normalized.find(summary_start) + len(summary_start)
-            potential = normalized[start_idx:start_idx + 200].strip()
+            if summary.startswith("]"):
+                summary = summary[1:].strip()
+            if summary.startswith("_START]"):
+                summary = summary[7:].strip()
 
-            cleaned_summary = (
-                potential
-                .split('[SUMMARY_')[0]
-                .split('[SUMMARY')[0]
-                .split('[')[0]
-                .strip()
-            )
+            if summary and len(summary) >= 5:
+                logger.info("Summary extracted safely")
+                return user_response, summary
 
-            user_response = original.split(summary_start)[0].strip()
-
-            if cleaned_summary and len(cleaned_summary) >= 10:
-                logger.info("Partial summary extracted safely")
-                return user_response, cleaned_summary
-
-            logger.info("Partial summary invalid or too short")
-            return original.strip(), None
+            logger.info("Summary too short or invalid")
+            return user_response, None
 
         # Case 3: No markers
         return original.strip(), None
@@ -350,17 +347,43 @@ class RAGAgent:
         messages = self._build_messages(question, context)
 
         buffer = ""
+        yielded_pos = 0
+        summary_detected = False
+        stop_markers = ["[SUMMARY", "SUMMARY:"]
 
         for chunk in self.llm.predict_stream(messages):
             buffer += chunk
 
-            # The moment summary markers appear, stop streaming to client
-            if '[SUMMARY_START]' in buffer or 'SUMMARY_' in buffer:
-                logger.info("Summary marker detected — stopping client stream")
-                break
+            if summary_detected:
+                continue
 
-            # Yield ONLY raw tokens
-            yield chunk
+            # Check if any marker is fully in the buffer
+            for marker in stop_markers:
+                if marker in buffer:
+                    summary_detected = True
+                    target_idx = buffer.find(marker)
+                    if target_idx > yielded_pos:
+                        yield buffer[yielded_pos:target_idx]
+                    yielded_pos = target_idx
+                    break
+
+            if summary_detected:
+                continue
+
+            # Check if the end of the buffer is a partial match for ANY marker
+            longest_partial = 0
+            for marker in stop_markers:
+                for i in range(len(marker)-1, 0, -1):
+                    if buffer.endswith(marker[:i]):
+                        if i > longest_partial:
+                            longest_partial = i
+                        break
+            
+            safe_end = len(buffer) - longest_partial
+            
+            if safe_end > yielded_pos:
+                yield buffer[yielded_pos:safe_end]
+                yielded_pos = safe_end
 
         # After streaming finishes, process full response exactly once
         self._process_complete_response(buffer)
