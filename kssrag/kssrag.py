@@ -50,21 +50,36 @@ class KSSRAG:
         
         if metadata is None:
             metadata = {"source": file_path}
-        
-        # Load and chunk document
-        if format == 'text':
-            content = load_document(file_path)
-            self.documents = chunker.chunk(content, metadata)
-        elif format == 'json':
-            data = load_json_documents(file_path)
-            self.documents = chunker.chunk(data)
-        elif format == 'pdf':
-            self.documents = chunker.chunk_pdf(file_path, metadata)
-        
+
+        # Load and chunk document (deferred so caching can skip it on a hit)
+        def _build_documents():
+            if format == 'text':
+                content = load_document(file_path)
+                return chunker.chunk(content, metadata)
+            elif format == 'json':
+                data = load_json_documents(file_path)
+                return chunker.chunk(data)
+            elif format == 'pdf':
+                return chunker.chunk_pdf(file_path, metadata)
+            raise ValueError(f"Unsupported file format: {file_path}")
+
         # Create vector store
         if self.config.CUSTOM_VECTOR_STORE:
             vector_store_class = import_custom_component(self.config.CUSTOM_VECTOR_STORE)
             self.vector_store = vector_store_class()
+            self.documents = _build_documents()
+            self.vector_store.add_documents(self.documents)
+        elif self.config.ENABLE_CACHE:
+            from .utils.cache import load_or_build_index
+            self.vector_store, self.documents = load_or_build_index(
+                source_path=file_path,
+                store_type=self.config.VECTOR_STORE_TYPE,
+                build_documents=_build_documents,
+                cache_root=self.config.CACHE_DIR,
+                chunk_size=self.config.CHUNK_SIZE,
+                chunk_overlap=self.config.CHUNK_OVERLAP,
+                max_docs=self.config.MAX_DOCS_FOR_TESTING,
+            )
         else:
             if self.config.VECTOR_STORE_TYPE == VectorStoreType.BM25:
                 self.vector_store = BM25VectorStore()
@@ -76,9 +91,9 @@ class KSSRAG:
                 self.vector_store = HybridVectorStore()
             elif self.config.VECTOR_STORE_TYPE == VectorStoreType.HYBRID_OFFLINE:
                 self.vector_store = HybridOfflineVectorStore()
-        
-        self.vector_store.add_documents(self.documents)
-        
+            self.documents = _build_documents()
+            self.vector_store.add_documents(self.documents)
+
         # Create retriever
         if self.config.CUSTOM_RETRIEVER:
             retriever_class = import_custom_component(self.config.CUSTOM_RETRIEVER)
