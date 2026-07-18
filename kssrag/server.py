@@ -5,6 +5,7 @@ from pydantic import BaseModel
 from typing import Dict, Any, Optional, List
 import uuid
 import json
+from collections import OrderedDict
 
 from kssrag.models.openrouter import OpenRouterLLM
 
@@ -52,63 +53,63 @@ def create_app(rag_agent: RAGAgent, server_config: Optional[ServerConfig] = None
         allow_headers=server_config.cors_allow_headers,
     )
     
-    # Session management
-    sessions = {}
-    
+    # Session management (bounded LRU to prevent unbounded memory growth)
+    sessions: "OrderedDict[str, RAGAgent]" = OrderedDict()
+    max_sessions = config.MAX_SESSIONS
+
+    def get_or_create_session(session_id: str) -> RAGAgent:
+        """Return the agent for a session, creating it if needed, with LRU eviction."""
+        if session_id in sessions:
+            sessions.move_to_end(session_id)
+            return sessions[session_id]
+
+        logger.info(f"Creating new session: {session_id}")
+        agent = RAGAgent(
+            retriever=rag_agent.retriever,
+            llm=rag_agent.llm,
+            system_prompt=rag_agent.system_prompt,
+        )
+        sessions[session_id] = agent
+        while len(sessions) > max_sessions:
+            evicted_id, _ = sessions.popitem(last=False)
+            logger.info(f"Evicted least-recently-used session: {evicted_id}")
+        return agent
+
     @app.post("/query")
     async def query_endpoint(request: QueryRequest):
         """Handle user queries"""
         query = request.query
         session_id = request.session_id or str(uuid.uuid4())
-        
+
         if not query.strip():
             raise HTTPException(status_code=400, detail="Query cannot be empty")
-        
+
         try:
-            # Get or create session
-            if session_id not in sessions:
-                logger.info(f"Creating new session: {session_id}")
-                # Create a new agent for this session
-                sessions[session_id] = RAGAgent(
-                    retriever=rag_agent.retriever,
-                    llm=rag_agent.llm,
-                    system_prompt=rag_agent.system_prompt
-                )
-            
-            agent = sessions[session_id]
+            agent = get_or_create_session(session_id)
             response = agent.query(query)
-            
+
             return {
                 "query": query,
                 "response": response,
                 "session_id": session_id
             }
-            
+
         except Exception as e:
             logger.error(f"Error handling query: {str(e)}")
             raise HTTPException(status_code=500, detail=f"Error: {str(e)}")
-    
+
     @app.post("/stream")
     async def stream_query(request: QueryRequest):
         """Streaming query endpoint with Server-Sent Events"""
         query = request.query
         session_id = request.session_id or str(uuid.uuid4())
-        
+
         if not query.strip():
             raise HTTPException(status_code=400, detail="Query cannot be empty")
-        
+
         try:
-            # Get or create session
-            if session_id not in sessions:
-                logger.info(f"Creating new streaming session: {session_id}")
-                sessions[session_id] = RAGAgent(
-                    retriever=rag_agent.retriever,
-                    llm=rag_agent.llm,
-                    system_prompt=rag_agent.system_prompt
-                )
-            
-            agent = sessions[session_id]
-            
+            agent = get_or_create_session(session_id)
+
             # async def generate():
             #     full_response = ""
             #     try:

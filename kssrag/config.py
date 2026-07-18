@@ -129,6 +129,12 @@ class Config(BaseSettings):
         default=os.getenv("SERVER_HOST", "localhost"),
         description="Host to run the server on"
     )
+
+    MAX_SESSIONS: int = Field(
+        default=int(os.getenv("MAX_SESSIONS", 1000)),
+        ge=1,
+        description="Maximum number of concurrent conversation sessions kept in memory (LRU eviction)"
+    )
     
     SERVER_PORT: int = Field(
         default=int(os.getenv("SERVER_PORT", 8000)),
