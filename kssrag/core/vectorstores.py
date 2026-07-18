@@ -10,6 +10,7 @@ import scipy.sparse as sp
 from typing import List, Dict, Any, Optional
 from ..utils.helpers import logger
 from ..config import config
+from .fusion import reciprocal_rank_fusion
 
 # NOTE: faiss and sentence_transformers are imported lazily inside the classes
 # that use them (see FAISSVectorStore) so that `import kssrag` and the
@@ -290,42 +291,18 @@ class HybridVectorStore(BaseVectorStore):
     
     def retrieve(self, query: str, top_k: int = 5) -> List[Dict[str, Any]]:
         try:
-            # Get results from both methods
+            # Retrieve a wider candidate set from each method, then fuse their
+            # rankings with RRF. Fusing by rank (not raw score) lets us combine
+            # lexical BM25 and semantic FAISS results without normalizing their
+            # incompatible score scales.
             bm25_results = self.bm25_store.retrieve(query, top_k * 2)
             faiss_results = self.faiss_store.retrieve(query, top_k * 2)
-            
-            # Combine and deduplicate by content
-            combined = {}
-            for doc in bm25_results + faiss_results:
-                # Use a combination of content and metadata for deduplication
-                key = hash(doc["content"] + str(doc["metadata"]))
-                if key not in combined:
-                    combined[key] = doc
-            
-            all_results = list(combined.values())
-            
-            # If no results after deduplication
-            if not all_results:
-                return []
-            
-            # Rerank by cosine similarity to the query. Encode the query and all
-            # candidate docs in a single batched call (one model pass) rather than
-            # re-encoding each doc individually in a Python loop.
-            query_embedding = self.faiss_store.model.encode(
-                query, normalize_embeddings=True
-            )
-            doc_embeddings = self.faiss_store.model.encode(
-                [doc["content"] for doc in all_results],
-                normalize_embeddings=True,
-                batch_size=config.BATCH_SIZE,
-                show_progress_bar=False,
-            )
 
-            # With normalized embeddings, cosine similarity is a dot product.
-            similarities = doc_embeddings @ query_embedding
-            ranked = np.argsort(similarities)[::-1][:top_k]
-            return [all_results[i] for i in ranked]
-            
+            fused = reciprocal_rank_fusion(
+                [bm25_results, faiss_results], top_k=top_k
+            )
+            return fused
+
         except Exception as e:
             logger.error(f"Error in hybrid retrieval: {str(e)}")
             return []
@@ -358,53 +335,19 @@ class HybridOfflineVectorStore(BaseVectorStore):
     
     def retrieve(self, query: str, top_k: int = 5) -> List[Dict[str, Any]]:
         try:
-            # Get results from both methods
+            # Retrieve a wider candidate set from each method, then fuse with RRF,
+            # weighting BM25 vs TF-IDF by alpha. RRF fuses by rank position, which
+            # avoids the flawed position-normalization the previous approach used.
             bm25_results = self.bm25_store.retrieve(query, top_k * 2)
             tfidf_results = self.tfidf_store.retrieve(query, top_k * 2)
-            
-            # Combine and deduplicate by content
-            combined = {}
-            for doc in bm25_results + tfidf_results:
-                # Use a combination of content and metadata for deduplication
-                key = hash(doc["content"] + str(doc["metadata"]))
-                if key not in combined:
-                    combined[key] = doc
-            
-            all_results = list(combined.values())
-            
-            # If no results after deduplication
-            if not all_results:
-                return []
-            
-            # Score results based on both methods
-            scored_results = []
-            
-            for doc in all_results:
-                # Get BM25 score
-                bm25_score = 0
-                for i, bm25_doc in enumerate(bm25_results):
-                    if (doc["content"] == bm25_doc["content"] and 
-                        doc["metadata"] == bm25_doc["metadata"]):
-                        # Normalize score based on position
-                        bm25_score = (len(bm25_results) - i) / len(bm25_results)
-                        break
-                
-                # Get TFIDF score
-                tfidf_score = 0
-                for i, tfidf_doc in enumerate(tfidf_results):
-                    if (doc["content"] == tfidf_doc["content"] and 
-                        doc["metadata"] == tfidf_doc["metadata"]):
-                        # Normalize score based on position
-                        tfidf_score = (len(tfidf_results) - i) / len(tfidf_results)
-                        break
-                
-                # Combine scores
-                combined_score = self.alpha * bm25_score + (1 - self.alpha) * tfidf_score
-                scored_results.append((doc, combined_score))
-            
-            scored_results.sort(key=lambda x: x[1], reverse=True)
-            return [doc for doc, _ in scored_results[:top_k]]
-            
+
+            fused = reciprocal_rank_fusion(
+                [bm25_results, tfidf_results],
+                top_k=top_k,
+                weights=[self.alpha, 1.0 - self.alpha],
+            )
+            return fused
+
         except Exception as e:
             logger.error(f"Error in hybrid offline retrieval: {str(e)}")
             return []
