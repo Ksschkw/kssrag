@@ -8,3 +8,4 @@ build
 dist
 kssrag.egg-info
 setup.py
+*E.md
