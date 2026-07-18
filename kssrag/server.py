@@ -177,14 +177,33 @@ def create_app(rag_agent: RAGAgent, server_config: Optional[ServerConfig] = None
         """Get current server configuration"""
         return server_config.dict()
     
-    @app.get("/sessions/{session_id}/clear")
-    async def clear_session(session_id: str):
-        """Clear a session's conversation history"""
+    def _clear_session(session_id: str):
+        """Clear a session's conversation history (shared by POST and legacy GET)."""
         if session_id in sessions:
             sessions[session_id].clear_conversation()
             return {"message": f"Session {session_id} cleared"}
-        else:
-            raise HTTPException(status_code=404, detail="Session not found")
+        raise HTTPException(status_code=404, detail="Session not found")
+
+    @app.post("/sessions/{session_id}/clear")
+    async def clear_session(session_id: str):
+        """Clear a session's conversation history."""
+        return _clear_session(session_id)
+
+    @app.delete("/sessions/{session_id}")
+    async def delete_session(session_id: str):
+        """Delete a session entirely (drops its agent and conversation)."""
+        if sessions.pop(session_id, None) is not None:
+            return {"message": f"Session {session_id} deleted"}
+        raise HTTPException(status_code=404, detail="Session not found")
+
+    @app.get("/sessions/{session_id}/clear", deprecated=True)
+    async def clear_session_legacy(session_id: str):
+        """Deprecated: use POST /sessions/{id}/clear. Kept for backward compatibility."""
+        logger.warning(
+            "GET /sessions/{id}/clear is deprecated and mutates state; "
+            "use POST /sessions/{id}/clear instead."
+        )
+        return _clear_session(session_id)
     
     @app.get("/")
     async def root():
