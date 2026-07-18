@@ -50,17 +50,3 @@ __all__ = [
 
 # Initialize configuration validation on import
 validate_config()
-
-import platform
-from pathlib import Path
-import os
-
-# Windows-specific cache directory handling
-if platform.system() == "Windows":
-    # Use local app data directory instead of home directory
-    cache_base = os.getenv('LOCALAPPDATA', os.path.expanduser('~'))
-    config.CACHE_DIR = os.path.join(cache_base, '.kssrag', 'cache')
-else:
-    config.CACHE_DIR = os.path.join(os.path.expanduser('~'), '.cache', 'kssrag')
-
-os.makedirs(config.CACHE_DIR, exist_ok=True)

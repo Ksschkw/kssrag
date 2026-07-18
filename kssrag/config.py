@@ -1,4 +1,5 @@
 import os
+import platform
 from dotenv import load_dotenv
 from typing import List, Optional, Dict, Any
 from pydantic import Field, validator
@@ -6,6 +7,18 @@ from pydantic_settings import BaseSettings
 from enum import Enum
 
 load_dotenv()
+
+
+def _default_cache_dir() -> str:
+    """Platform-appropriate cache directory, overridable via CACHE_DIR env var."""
+    env = os.getenv("CACHE_DIR")
+    if env:
+        return env
+    if platform.system() == "Windows":
+        base = os.getenv("LOCALAPPDATA", os.path.expanduser("~"))
+        return os.path.join(base, ".kssrag", "cache")
+    return os.path.join(os.path.expanduser("~"), ".cache", "kssrag")
+
 
 class VectorStoreType(str, Enum):
     BM25 = "bm25"
@@ -151,7 +164,7 @@ class Config(BaseSettings):
     )
     
     CACHE_DIR: str = Field(
-        default=os.getenv("CACHE_DIR", ".cache"),
+        default_factory=_default_cache_dir,
         description="Directory to store cache files"
     )
     
