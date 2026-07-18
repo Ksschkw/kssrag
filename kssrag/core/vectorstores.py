@@ -307,19 +307,23 @@ class HybridVectorStore(BaseVectorStore):
             if not all_results:
                 return []
             
-            # Rerank by relevance to query using FAISS similarity
-            query_embedding = self.faiss_store.model.encode(query)
-            scored_results = []
-            
-            for doc in all_results:
-                doc_embedding = self.faiss_store.model.encode(doc["content"])
-                similarity = np.dot(query_embedding, doc_embedding) / (
-                    np.linalg.norm(query_embedding) * np.linalg.norm(doc_embedding))
-                
-                scored_results.append((doc, similarity))
-            
-            scored_results.sort(key=lambda x: x[1], reverse=True)
-            return [doc for doc, _ in scored_results[:top_k]]
+            # Rerank by cosine similarity to the query. Encode the query and all
+            # candidate docs in a single batched call (one model pass) rather than
+            # re-encoding each doc individually in a Python loop.
+            query_embedding = self.faiss_store.model.encode(
+                query, normalize_embeddings=True
+            )
+            doc_embeddings = self.faiss_store.model.encode(
+                [doc["content"] for doc in all_results],
+                normalize_embeddings=True,
+                batch_size=config.BATCH_SIZE,
+                show_progress_bar=False,
+            )
+
+            # With normalized embeddings, cosine similarity is a dot product.
+            similarities = doc_embeddings @ query_embedding
+            ranked = np.argsort(similarities)[::-1][:top_k]
+            return [all_results[i] for i in ranked]
             
         except Exception as e:
             logger.error(f"Error in hybrid retrieval: {str(e)}")
