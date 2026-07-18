@@ -3,9 +3,12 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import StreamingResponse
 from pydantic import BaseModel
 from typing import Dict, Any, Optional, List
+import asyncio
 import uuid
 import json
 from collections import OrderedDict
+
+import anyio
 
 from kssrag.models.openrouter import OpenRouterLLM
 
@@ -86,7 +89,9 @@ def create_app(rag_agent: RAGAgent, server_config: Optional[ServerConfig] = None
 
         try:
             agent = get_or_create_session(session_id)
-            response = agent.query(query)
+            # agent.query() is synchronous and network-bound; run it in a worker
+            # thread so it does not block the event loop (allowing concurrency).
+            response = await anyio.to_thread.run_sync(agent.query, query)
 
             return {
                 "query": query,
@@ -110,47 +115,50 @@ def create_app(rag_agent: RAGAgent, server_config: Optional[ServerConfig] = None
         try:
             agent = get_or_create_session(session_id)
 
-            # async def generate():
-            #     full_response = ""
-            #     try:
-            #         # Use agent's query_stream which handles context and summarization
-            #         for chunk in agent.query_stream(query, top_k=5):
-            #             full_response += chunk
-            #             yield f"data: {json.dumps({'chunk': chunk, 'done': False})}\n\n"
-                    
-            #         yield f"data: {json.dumps({'chunk': '', 'done': True})}\n\n"
-                    
-            #     except Exception as e:
-            #         logger.error(f"Streaming error: {str(e)}")
-            #         yield f"data: {json.dumps({'error': str(e), 'done': True})}\n\n"
-
             async def generate():
+                # agent.query_stream is a *synchronous* generator that performs
+                # blocking network I/O. Drain it in a worker thread and hand each
+                # token back to the event loop via a queue, so streaming one client
+                # never blocks the loop for the others.
+                queue: asyncio.Queue = asyncio.Queue()
+                loop = asyncio.get_running_loop()
+                _DONE = object()
+
+                def producer():
+                    try:
+                        for token in agent.query_stream(query, top_k=5):
+                            if token:
+                                loop.call_soon_threadsafe(queue.put_nowait, ("chunk", token))
+                        loop.call_soon_threadsafe(queue.put_nowait, ("done", None))
+                    except Exception as exc:  # noqa: BLE001 - surfaced to client
+                        loop.call_soon_threadsafe(queue.put_nowait, ("error", str(exc)))
+
+                producer_task = anyio.to_thread.run_sync(producer)
+                producer_future = asyncio.ensure_future(producer_task)
                 try:
-                    # Stream tokens ONLY
-                    for token in agent.query_stream(query, top_k=5):
-                        if not token:
-                            continue
+                    while True:
+                        kind, payload = await queue.get()
+                        if kind == "chunk":
+                            yield f"data: {json.dumps({'chunk': payload, 'done': False})}\n\n"
+                        elif kind == "done":
+                            yield f"data: {json.dumps({'chunk': '', 'done': True})}\n\n"
+                            break
+                        else:  # error
+                            logger.error(f"Streaming error: {payload}")
+                            yield f"data: {json.dumps({'error': payload, 'done': True})}\n\n"
+                            break
+                finally:
+                    await producer_future
 
-                        yield f"data: {json.dumps({'chunk': token, 'done': False})}\n\n"
-
-                    # Signal completion (no payload)
-                    yield f"data: {json.dumps({'chunk': '', 'done': True})}\n\n"
-
-                except Exception as e:
-                    logger.error(f"Streaming error: {str(e)}")
-                    yield f"data: {json.dumps({'error': str(e), 'done': True})}\n\n"
-
-
-            
             return StreamingResponse(
-                generate(), 
+                generate(),
                 media_type="text/event-stream",
                 headers={
                     "Cache-Control": "no-cache",
                     "Connection": "keep-alive",
                 }
             )
-            
+
         except Exception as e:
             logger.error(f"Streaming query failed: {str(e)}")
             raise HTTPException(status_code=500, detail=f"Streaming error: {str(e)}")
