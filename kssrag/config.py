@@ -59,7 +59,32 @@ class Config(BaseSettings):
         default=os.getenv("FALLBACK_MODELS", "deepseek/deepseek-r1-0528:free,deepseek/deepseek-chat,deepseek/deepseek-r1:free").split(","),
         description="List of fallback models to try if the default model fails"
     )
-    
+
+    LLM_TEMPERATURE: float = Field(
+        default=float(os.getenv("LLM_TEMPERATURE", 0.7)),
+        ge=0.0,
+        le=2.0,
+        description="Sampling temperature for LLM responses"
+    )
+
+    LLM_MAX_TOKENS: int = Field(
+        default=int(os.getenv("LLM_MAX_TOKENS", 1024)),
+        ge=1,
+        description="Maximum tokens to generate per LLM response"
+    )
+
+    LLM_TIMEOUT: int = Field(
+        default=int(os.getenv("LLM_TIMEOUT", 30)),
+        ge=1,
+        description="Per-request timeout (seconds) for non-streaming LLM calls"
+    )
+
+    LLM_STREAM_TIMEOUT: int = Field(
+        default=int(os.getenv("LLM_STREAM_TIMEOUT", 60)),
+        ge=1,
+        description="Per-request timeout (seconds) for streaming LLM calls"
+    )
+
     # Chunking settings
     CHUNK_SIZE: int = Field(
         default=int(os.getenv("CHUNK_SIZE", 500)),

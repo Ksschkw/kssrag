@@ -1,6 +1,7 @@
 import time
 from typing import Generator, List, Dict, Any, Optional
 from ..utils.helpers import logger
+from ..models.openrouter import LLMError
 
 class RAGAgent:
     """RAG agent implementation with discrete conversation summaries"""
@@ -262,13 +263,17 @@ class RAGAgent:
             
             # Add assistant response to conversation (clean version only)
             self.add_message("assistant", user_response)
-            
+
             logger.info(f" Final user response: {len(user_response)} chars")
             return user_response
-            
+
+        except LLMError:
+            # All models failed — propagate so the caller can surface a real error
+            # instead of silently poisoning the conversation with a fallback string.
+            logger.error("LLM generation failed for all models")
+            raise
         except Exception as e:
             logger.error(f"Error processing query: {str(e)}")
-            # logger.error(f" QUERY FAILED: {str(e)}")
             return "I encountered an issue processing your query. Please try again."
     
     def query_stream(self, question: str, top_k: int = 5) -> Generator[str, None, None]:
