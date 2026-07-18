@@ -82,7 +82,7 @@ def validate_config():
 
 # Your signature in the code
 def kss_signature():
-    return "Built with HATE by Ksschkw (github.com/Ksschkw)"
+    return "Built by Ksschkw (github.com/Ksschkw)"
 
 def import_custom_component(import_path: str):
     """Import a custom component from a string path"""

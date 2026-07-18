@@ -1,3 +1,4 @@
+import time
 from typing import Generator, List, Dict, Any, Optional
 from ..utils.helpers import logger
 
@@ -257,7 +258,7 @@ class RAGAgent:
                 self._add_conversation_summary(conversation_summary)
                 logger.info(" Summary processing completed successfully")
             else:
-                logger.info("Bitch No summary generated for this exchange")
+                logger.info("No summary generated for this exchange")
             
             # Add assistant response to conversation (clean version only)
             self.add_message("assistant", user_response)
@@ -422,7 +423,6 @@ class RAGAgent:
         chunk_size = 2
         for i in range(0, len(user_response), chunk_size):
             yield user_response[i:i + chunk_size]
-            import time
             time.sleep(0.02)
 
 

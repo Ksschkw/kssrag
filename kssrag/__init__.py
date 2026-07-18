@@ -17,8 +17,8 @@ __version__ = "0.2.5"
 __author__ = "Ksschkw"
 __license__ = "MIT"
 
-# Your footprint - include your GitHub username and a signature
-__signature__ = "Built with HATE by Ksschkw (github.com/Ksschkw)"
+# Author footprint
+__signature__ = "Built by Ksschkw (github.com/Ksschkw)"
 
 # Export the main classes for easy access
 __all__ = [
