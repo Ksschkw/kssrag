@@ -13,7 +13,7 @@ from .config import Config, VectorStoreType, ChunkerType, RetrieverType
 from .server import create_app, ServerConfig
 from .cli import main
 
-__version__ = "0.1.0"
+__version__ = "0.2.5"
 __author__ = "Ksschkw"
 __license__ = "MIT"
 
