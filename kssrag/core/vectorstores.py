@@ -3,9 +3,7 @@ import os
 import re
 import pickle
 import numpy as np
-import faiss
 from rank_bm25 import BM25Okapi
-from sentence_transformers import SentenceTransformer
 from sklearn.feature_extraction.text import TfidfVectorizer
 from sklearn.metrics.pairwise import cosine_similarity
 import scipy.sparse as sp
@@ -13,12 +11,10 @@ from typing import List, Dict, Any, Optional
 from ..utils.helpers import logger
 from ..config import config
 
-FAISS_AVAILABLE = False
-try:
-    import faiss
-    FAISS_AVAILABLE = True
-except ImportError:
-    pass
+# NOTE: faiss and sentence_transformers are imported lazily inside the classes
+# that use them (see FAISSVectorStore) so that `import kssrag` and the
+# download-free stores (bm25, bm25s, tfidf, hybrid_offline) do not pull in
+# torch/faiss. See helpers.setup_faiss for the AVX-fallback loader.
 
 class BaseVectorStore:
     """Base class for vector stores"""
@@ -123,7 +119,10 @@ class FAISSVectorStore(BaseVectorStore):
         
         if not faiss_available:
             raise ImportError("FAISS is not available. Please install it with 'pip install faiss-cpu' or use a different vector store.")
-        
+
+        import faiss
+        from sentence_transformers import SentenceTransformer
+
         super().__init__(persist_path)
         self.model_name = model_name or config.FAISS_MODEL_NAME
         # Handle cache directory permissions
@@ -185,6 +184,7 @@ class FAISSVectorStore(BaseVectorStore):
     
     def persist(self):
         if self.persist_path and self.metadata_path:
+            import faiss
             faiss.write_index(self.index, self.persist_path)
             
             # Save metadata
@@ -196,9 +196,10 @@ class FAISSVectorStore(BaseVectorStore):
             logger.info(f"FAISS index persisted to {self.persist_path}")
     
     def load(self):
-        if (self.persist_path and os.path.exists(self.persist_path) and 
+        if (self.persist_path and os.path.exists(self.persist_path) and
             self.metadata_path and os.path.exists(self.metadata_path)):
-            
+
+            import faiss
             self.index = faiss.read_index(self.persist_path)
             
             # Load metadata
@@ -419,13 +420,11 @@ class HybridOfflineVectorStore(BaseVectorStore):
         self.documents = self.bm25_store.documents
         logger.info(f"Hybrid offline index loaded")
 
-import bm25s
-from Stemmer import Stemmer
-
 class BM25SVectorStore(BaseVectorStore):
     """BM25S vector store using the bm25s library for ultra-fast retrieval"""
-    
+
     def __init__(self, persist_path: Optional[str] = "bm25s_index.pkl"):
+        from Stemmer import Stemmer
         super().__init__(persist_path)
         self.bm25_retriever = None
         self.stemmer = Stemmer("english")
@@ -436,6 +435,7 @@ class BM25SVectorStore(BaseVectorStore):
         self.doc_texts = [doc["content"] for doc in documents]
         
         try:
+            import bm25s
             # Tokenize corpus with BM25S
             self.corpus_tokens = bm25s.tokenize(
                 self.doc_texts, 
@@ -458,6 +458,7 @@ class BM25SVectorStore(BaseVectorStore):
             raise ValueError("BM25S index not initialized. Call add_documents first.")
         
         try:
+            import bm25s
             # Tokenize query with BM25S
             query_tokens = bm25s.tokenize([query], stemmer=self.stemmer)
             
