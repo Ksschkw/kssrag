@@ -33,6 +33,7 @@ setup(
     install_requires=[
         "fastapi>=0.104.0",
         "uvicorn>=0.24.0",
+        "anyio>=3.7.0",
         "python-dotenv>=1.0.0",
         "requests>=2.31.0",
         "rank-bm25>=0.2.2",
