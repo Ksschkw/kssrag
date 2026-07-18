@@ -1,760 +1,259 @@
-# KSS RAG - Knowledge Retrieval Augmented Generation Framework
+# KSS RAG
 
 <div align="center">
 
 ![Python Version](https://img.shields.io/badge/python-3.8%2B-blue)
 ![License](https://img.shields.io/badge/license-MIT-green)
-![Version](https://img.shields.io/badge/version-0.2.4-brightgreen)
+![Version](https://img.shields.io/badge/version-0.2.5-brightgreen)
 ![Framework](https://img.shields.io/badge/framework-RAG-orange)
-![Documentation](https://img.shields.io/badge/docs-comprehensive-brightgreen)
 
-**Enterprise-Grade Retrieval-Augmented Generation for Modern Applications**
+**Stand up a streaming RAG API from a single document with one command.**
 
-[Quick Start](#quick-start) • [Features](#features) • [Documentation](#documentation) • [Examples](#examples) • [API Reference](#api-reference)
+[Quick Start](#quick-start) • [Why KSS RAG](#why-kss-rag) • [CLI](#cli) • [Python API](#python-api) • [Architecture](#architecture) • [Configuration](#configuration)
 
 </div>
 
-## Table of Contents
-
-- [Overview](#overview)
-- [Architecture](#architecture)
-- [Features](#features)
-- [Quick Start](#quick-start)
-- [Installation](#installation)
-- [Core Concepts](#core-concepts)
-- [Documentation](#documentation)
-- [Examples](#examples)
-- [API Reference](#api-reference)
-- [Deployment](#deployment)
-- [Contributing](#contributing)
-- [Support](#support)
-- [License](#license)
-
 ## Overview
 
-KSS RAG is a production-ready Retrieval-Augmented Generation framework designed for enterprises requiring robust, scalable, and maintainable AI-powered document processing. Built with architectural excellence and engineering rigor, this framework provides comprehensive solutions for knowledge retrieval, document understanding, and intelligent question answering.
+KSS RAG is a Retrieval-Augmented Generation framework built around one idea: getting from *"I have a document"* to *"I have a live, streaming Q&A API over it"* should take a single command — no glue code, no notebook, no orchestration boilerplate.
 
-### Key Capabilities
+Point the CLI at a source-of-truth document, hand it a system prompt, and it loads, chunks, indexes, and serves a FastAPI endpoint with Server-Sent Events streaming and per-session conversation memory. The same pipeline is available as a Python API and a one-shot CLI query when you don't need a server.
 
-- **Multi-Format Document Processing**: Text, PDF, Office documents, images with OCR
-- **Advanced Vector Search**: Multiple vector store implementations with hybrid approaches
-- **Real-time Streaming**: Token-by-token response streaming for enhanced user experience
-- **Enterprise Security**: Comprehensive security and input validation
-- **Production Monitoring**: Health checks, metrics, and observability
+It's provider-light by design: LLM calls go through [OpenRouter](https://openrouter.ai/), so you can swap between models (DeepSeek, Claude, GPT, and others) by changing one env var, with automatic fallback to backup models when one is unavailable.
 
-## Architecture
+## Why KSS RAG
 
-```mermaid
-graph TB
-    A[Document Input] --> B[Document Loader]
-    B --> C[Chunker]
-    C --> D[Vector Store]
-    D --> E[FAISS Index]
-    D --> F[BM25 Index]
-    D --> G[Hybrid Index]
-    
-    H[User Query] --> I[Query Processor]
-    I --> J[Retriever]
-    J --> K[Vector Store]
-    J --> L[Context Builder]
-    
-    M[LLM Provider] --> N[OpenRouter]
-    M --> O[Custom LLMs]
-    
-    L --> P[Prompt Engineer]
-    P --> M
-    M --> Q[Response Generator]
-    Q --> R[Streaming Output]
-    Q --> S[Standard Output]
-    
-    subgraph "Document Processing Pipeline"
-        B --> C --> D
-    end
-    
-    subgraph "Query Processing Pipeline"
-        I --> J --> L --> P
-    end
-    
-    style A fill:#e1f5fe
-    style H fill:#f3e5f5
-    style R fill:#e8f5e8
-    style S fill:#e8f5e8
-```
+Most RAG frameworks are libraries — powerful, but they hand you primitives and expect you to assemble the server, the streaming, and the session handling yourself. KSS RAG ships that assembly as a first-class feature:
 
-## Features
+- **One command to a running API.** `kssrag server --file docs.pdf --system-prompt prompt.txt` gives you `/query`, `/stream` (SSE), `/health`, and session management out of the box.
+- **Bring your own prompt and source of truth.** The system prompt and the document are inputs, not code changes.
+- **Pluggable everything.** Six vector stores, two retrievers, multiple chunkers — selected by config, or replaced entirely with your own classes via an import path (no forking required).
+- **Streaming that doesn't leak internals.** Token-by-token SSE with marker-aware buffering (see [Conversation memory](#conversation-memory)).
+- **Rolling conversation memory.** The agent compresses history into running summaries to keep context bounded across long conversations.
 
-### 🎯 Core Capabilities
-
-| Feature | Description | Status |
-|---------|-------------|--------|
-| **Multi-Format Support** | Text, PDF, JSON, DOCX, Excel, PowerPoint, Images | ✅ Production Ready |
-| **Advanced OCR** | Handwritten (PaddleOCR) & Typed (Tesseract) text recognition | ✅ Production Ready |
-| **Vector Stores** | BM25, BM25S, FAISS, TFIDF, Hybrid implementations | ✅ Production Ready |
-| **Streaming Responses** | Real-time token streaming with OpenRouter | ✅ Production Ready |
-| **REST API** | FastAPI with comprehensive endpoints | ✅ Production Ready |
-| **CLI Interface** | Command-line tools for rapid development | ✅ Production Ready |
-
-### 🔧 Technical Excellence
-
-| Aspect | Implementation | Benefits |
-|--------|----------------|----------|
-| **Windows Compatibility** | No AVX2 dependencies, hybrid fallbacks | Enterprise deployment |
-| **Extensible Architecture** | Plugin system for custom components | Future-proof design |
-| **Performance Optimization** | Batch processing, caching, memory management | High throughput |
-| **Error Resilience** | Smart fallbacks, retry mechanisms | Production reliability |
-
-### 📊 Performance Metrics
-
-| Operation | Average Latency | Throughput |
-|-----------|-----------------|------------|
-| Document Indexing | 2-5 sec/1000 chunks | 200+ docs/min |
-| Query Processing | 500-1500 ms | 50+ QPS |
-| OCR Processing | 1-3 sec/image (Handwritten would take longer) | 20+ images/min (Handwritten would take longer) |
-| Streaming Response | 50-200 ms/first token | Real-time |
+If you want a RAG *service* rather than a RAG *toolkit*, that's the niche this fills.
 
 ## Quick Start
 
-### Installation
+### Install
 
 ```bash
-# Base installation
 pip install kssrag
 
-# With extended capabilities
-pip install kssrag[ocr,gpu,dev]
+# Optional extras
+pip install kssrag[ocr]      # PaddleOCR (handwritten) + Tesseract (typed)
+pip install kssrag[office]   # DOCX / Excel / PowerPoint loaders
+pip install kssrag[gpu]      # GPU FAISS
+pip install kssrag[all]      # everything
 ```
 
-### Basic Usage
-
-```python
-from kssrag import KSSRAG
-import os
-
-# Configure environment
-os.environ["OPENROUTER_API_KEY"] = "your-api-key-here"
-
-# Initialize framework
-rag = KSSRAG()
-
-# Load knowledge base
-rag.load_document("technical_docs.pdf")
-rag.load_document("product_specs.docx") 
-rag.load_document("research_data.xlsx")
-
-# Execute intelligent query
-response = rag.query(
-    "What are the technical specifications and key differentiators?",
-    top_k=5
-)
-print(response)
-```
-
-### CLI Demonstration
+Set your key (see `.env.example` for all options):
 
 ```bash
-# Stream processing with hybrid retrieval
+echo "OPENROUTER_API_KEY=your_key_here" > .env
+```
+
+### Serve a RAG API in one command
+
+```bash
+python -m kssrag.cli server \
+    --file knowledge_base.txt \
+    --system-prompt "You are a support assistant. Answer only from the provided context." \
+    --vector-store hybrid_offline \
+    --host 0.0.0.0 --port 8000
+```
+
+Then query it:
+
+```bash
+curl -X POST http://localhost:8000/stream \
+    -H "Content-Type: application/json" \
+    -d '{"query": "How do I reset my password?", "session_id": "user-123"}'
+```
+
+`--system-prompt` accepts either an inline string or a path to a prompt file.
+
+## CLI
+
+Two subcommands: `query` (one-shot) and `server` (persistent API).
+
+```bash
+# One-shot query with streaming output
 python -m kssrag.cli query \
-    --file enterprise_docs.pdf \
-    --query "Architecture decisions and rationale" \
+    --file report.pdf \
+    --format pdf \
+    --query "Summarize the key risks." \
     --vector-store hybrid_online \
     --top-k 8 \
     --stream
 
-# Production API server
-python -m kssrag.cli server \
-    --file knowledge_base.docx \
-    --port 8080 \
-    --host 0.0.0.0 \
-    --vector-store faiss
+# OCR an image, then query it
+python -m kssrag.cli query \
+    --file scanned_notes.png \
+    --format image \
+    --ocr-mode handwritten \
+    --query "What are the action items?"
 ```
 
-## Installation
+| Flag | Applies to | Description |
+|------|-----------|-------------|
+| `--file` | both | Path to the source document (required) |
+| `--query` | query | The question to ask (required) |
+| `--format` | both | `text`, `json`, `pdf`, `image`, `docx`, `excel`, `pptx` |
+| `--vector-store` | both | `bm25`, `bm25s`, `faiss`, `tfidf`, `hybrid_online`, `hybrid_offline` |
+| `--system-prompt` | both | Inline prompt text, or a path to a prompt file |
+| `--stream` | query | Stream the response token-by-token |
+| `--top-k` | query | Number of chunks to retrieve |
+| `--ocr-mode` | query | `typed` (Tesseract) or `handwritten` (PaddleOCR) |
+| `--host` / `--port` | server | Server bind address |
 
-### System Requirements
+> **Note:** the `server` subcommand currently loads `text`, `json`, and `pdf` formats. Image and Office formats are supported by the `query` subcommand.
 
-| Component | Minimum | Recommended |
-|-----------|---------|-------------|
-| Python | 3.8+ | 3.11+ |
-| RAM | 4 GB | 16 GB |
-| Storage | 1 GB | 10 GB+ |
-| OS | Windows 10+, Linux, macOS | Linux |
-
-### Installation Methods
-
-**Standard Installation**
-```bash
-pip install kssrag
-```
-
-**Extended Capabilities**
-```bash
-# OCR functionality (PaddleOCR + Tesseract)
-pip install kssrag[ocr]
-
-# GPU acceleration
-pip install kssrag[gpu]
-
-# Development tools
-pip install kssrag[dev]
-
-# All features
-pip install kssrag[all]
-```
-
-**Source Installation**
-```bash
-git clone https://github.com/Ksschkw/kssrag
-cd kssrag
-pip install -e .[all]
-```
-
-### Verification
+## Python API
 
 ```python
-# Verify installation
-import kssrag
-from kssrag import KSSRAG
+from kssrag import KSSRAG, Config, VectorStoreType
 
-print(f"KSS RAG Version: {kssrag.__version__}")
-
-# Test basic functionality
-rag = KSSRAG()
-print("Framework initialized successfully")
-```
-
-## Core Concepts
-
-### Document Processing Pipeline
-
-```mermaid
-sequenceDiagram
-    participant User
-    participant System
-    participant Loader
-    participant Chunker
-    participant VectorStore
-    participant Retriever
-    participant LLM
-
-    User->>System: load_document(file_path)
-    System->>Loader: parse_document()
-    Loader->>Chunker: chunk_content()
-    Chunker->>VectorStore: add_documents()
-    VectorStore->>System: indexing_complete()
-    
-    User->>System: query(question)
-    System->>Retriever: retrieve_relevant()
-    Retriever->>VectorStore: similarity_search()
-    VectorStore->>Retriever: relevant_chunks()
-    Retriever->>LLM: generate_response()
-    LLM->>System: final_response()
-    System->>User: display_result()
-```
-
-### Vector Store Architecture
-
-```mermaid
-graph LR
-    A[Query] --> B{Vector Store Router}
-    
-    B --> C[BM25 Store]
-    B --> D[BM25S Store]
-    B --> E[FAISS Store]
-    B --> F[TFIDF Store]
-    B --> G[Hybrid Online]
-    B --> H[Hybrid Offline]
-    
-    C --> I[Keyword Matching]
-    D --> J[Stemmed Keywords]
-    E --> K[Semantic Search]
-    F --> L[Statistical Analysis]
-    
-    G --> M[FAISS + BM25 Fusion]
-    H --> N[BM25 + TFIDF Fusion]
-    
-    I --> O[Results]
-    J --> O
-    K --> O
-    L --> O
-    M --> O
-    N --> O
-    
-    style O fill:#c8e6c9
-```
-
-## Documentation
-
-### Comprehensive Guides
-
-- [**Configuration Guide**](docs/configuration.md) - Detailed configuration options and best practices
-- [**API Reference**](docs/api_reference.md) - Complete API documentation with examples
-- [**Deployment Guide**](docs/deployment.md) - Production deployment strategies
-- [**Performance Tuning**](docs/performance.md) - Optimization techniques and benchmarks
-
-### Tutorials
-
-- [**Getting Started**](examples/basic_usage.py) - Basic framework usage
-- [**Advanced Features**](examples/advanced_usage.py) - Custom configurations and extensions
-- [**Custom Components**](examples/custom_config.py) - Building custom chunkers and vector stores
-
-## Examples
-
-### Basic Implementation
-
-```python
-"""
-Basic KSS RAG implementation for document Q&A
-"""
-from kssrag import KSSRAG
-import os
-
-def main():
-    # Configuration
-    os.environ["OPENROUTER_API_KEY"] = "your-api-key"
-    
-    # Initialize
-    rag = KSSRAG()
-    
-    # Load documents
-    rag.load_document("technical_manual.pdf")
-    rag.load_document("api_documentation.md")
-    
-    # Query system
-    response = rag.query(
-        "How do I implement the authentication system?",
-        top_k=5
-    )
-    
-    print("Response:", response)
-
-if __name__ == "__main__":
-    main()
-```
-
-### Advanced Configuration
-
-```python
-"""
-Enterprise-grade configuration with custom components
-"""
-from kssrag import KSSRAG, Config, VectorStoreType, RetrieverType
-from kssrag.core.agents import RAGAgent
-from kssrag.models.openrouter import OpenRouterLLM
-import os
-
-def main():
-    # Enterprise configuration
-    config = Config(
-        OPENROUTER_API_KEY=os.getenv("OPENROUTER_API_KEY"),
-        DEFAULT_MODEL="anthropic/claude-3-sonnet",
-        VECTOR_STORE_TYPE=VectorStoreType.HYBRID_ONLINE,
-        RETRIEVER_TYPE=RetrieverType.HYBRID,
-        TOP_K=10,
-        CHUNK_SIZE=1000,
-        CHUNK_OVERLAP=150,
-        BATCH_SIZE=32,
-        ENABLE_CACHE=True,
-        CACHE_DIR="/opt/kssrag/cache",
-        LOG_LEVEL="INFO"
-    )
-    
-    # Initialize with custom config
-    rag = KSSRAG(config=config)
-    
-    # Load enterprise documents
-    rag.load_document("product_requirements.pdf")
-    rag.load_document("architecture_docs.docx")
-    rag.load_document("user_research.json")
-    
-    # Custom expert prompt
-    expert_prompt = """
-    You are a senior technical expert analyzing documentation. 
-    Provide authoritative, precise responses based on the source material.
-    Focus on actionable insights and technical accuracy.
-    """
-    
-    # Custom agent configuration
-    llm = OpenRouterLLM(
-        api_key=config.OPENROUTER_API_KEY,
-        model=config.DEFAULT_MODEL,
-        stream=True
-    )
-    
-    rag.agent = RAGAgent(
-        retriever=rag.retriever,
-        llm=llm,
-        system_prompt=expert_prompt
-    )
-    
-    # Execute complex query
-    query = """
-    Analyze the technical architecture and identify:
-    1. Key design decisions
-    2. Potential scalability concerns  
-    3. Recommended improvements
-    """
-    
-    print("Processing complex query...")
-    for chunk in rag.agent.query_stream(query, top_k=8):
-        print(chunk, end="", flush=True)
-
-if __name__ == "__main__":
-    main()
-```
-
-### OCR Integration
-
-```python
-"""
-Advanced OCR processing for document digitization
-"""
-from kssrag import KSSRAG, Config
-import os
-
-def process_scanned_documents():
-    config = Config(
-        OPENROUTER_API_KEY=os.getenv("OPENROUTER_API_KEY"),
-        OCR_DEFAULT_MODE="handwritten"  # or "typed"
-    )
-    
-    rag = KSSRAG(config=config)
-    
-    # Process various document types
-    documents = [
-        ("handwritten_notes.jpg", "handwritten"),
-        ("typed_contract.jpg", "typed"), 
-        ("mixed_document.png", "handwritten")
-    ]
-    
-    for doc_path, ocr_mode in documents:
-        try:
-            print(f"Processing {doc_path} with {ocr_mode} OCR...")
-            rag.load_document(doc_path, format="image")
-            print(f"Successfully processed {doc_path}")
-        except Exception as e:
-            print(f"Error processing {doc_path}: {str(e)}")
-    
-    # Query across all processed documents
-    response = rag.query(
-        "Extract and summarize all action items and deadlines",
-        top_k=6
-    )
-    
-    return response
-
-if __name__ == "__main__":
-    result = process_scanned_documents()
-    print("OCR Processing Result:", result)
-```
-
-## API Reference
-
-### Core Classes
-
-#### KSSRAG
-The primary interface for the RAG framework.
-
-```python
-class KSSRAG:
-    """
-    Main RAG framework class providing document processing and query capabilities.
-    
-    Attributes:
-        config (Config): Framework configuration
-        vector_store: Active vector store instance
-        retriever: Document retriever instance  
-        agent: RAG agent for query processing
-        documents (List): Processed document chunks
-    """
-    
-    def __init__(self, config: Optional[Config] = None):
-        """Initialize RAG system with optional configuration"""
-        
-    def load_document(self, file_path: str, format: Optional[str] = None,
-                     chunker: Optional[Any] = None, metadata: Optional[Dict[str, Any]] = None):
-        """
-        Load and process document for retrieval
-        
-        Args:
-            file_path: Path to document file
-            format: Document format (auto-detected if None)
-            chunker: Custom chunker instance
-            metadata: Additional document metadata
-        """
-        
-    def query(self, question: str, top_k: Optional[int] = None) -> str:
-        """
-        Execute query against loaded documents
-        
-        Args:
-            question: Natural language query
-            top_k: Number of results to retrieve
-            
-        Returns:
-            Generated response string
-        """
-        
-    def create_server(self, server_config=None):
-        """
-        Create FastAPI server instance
-        
-        Returns:
-            FastAPI application instance
-        """
-```
-
-#### Configuration Management
-
-```python
-class Config(BaseSettings):
-    """
-    Comprehensive configuration management with validation
-    
-    Example:
-        config = Config(
-            OPENROUTER_API_KEY="key",
-            VECTOR_STORE_TYPE=VectorStoreType.HYBRID_ONLINE,
-            TOP_K=10
-        )
-    """
-    
-    # API Configuration
-    OPENROUTER_API_KEY: str
-    DEFAULT_MODEL: str = "anthropic/claude-3-sonnet"
-    FALLBACK_MODELS: List[str] = ["deepseek/deepseek-chat-v3.1:free"]
-    
-    # Processing Configuration  
-    CHUNK_SIZE: int = 800
-    CHUNK_OVERLAP: int = 100
-    VECTOR_STORE_TYPE: VectorStoreType = VectorStoreType.HYBRID_OFFLINE
-    
-    # Performance Configuration
-    BATCH_SIZE: int = 64
-    ENABLE_CACHE: bool = True
-    
-    # Server Configuration
-    SERVER_HOST: str = "localhost"
-    SERVER_PORT: int = 8000
-```
-
-### Server Endpoints
-
-| Endpoint | Method | Description | Parameters |
-|----------|--------|-------------|------------|
-| `/query` | POST | Execute RAG query | `query`, `session_id` |
-| `/stream` | POST | Streaming query | `query`, `session_id` |
-| `/health` | GET | System health | - |
-| `/config` | GET | Server configuration | - |
-| `/sessions/{id}/clear` | GET | Clear session | `session_id` |
-
-## Deployment
-
-### Docker Deployment
-
-```dockerfile
-# Dockerfile
-FROM python:3.11-slim
-
-# Install system dependencies
-RUN apt-get update && apt-get install -y \
-    tesseract-ocr \
-    libgl1 \
-    && rm -rf /var/lib/apt/lists/*
-
-WORKDIR /app
-
-# Copy requirements and install
-COPY requirements.txt .
-RUN pip install --no-cache-dir -r requirements.txt
-
-# Copy application
-COPY . .
-
-# Create non-privileged user
-RUN useradd -m -u 1000 kssrag
-USER kssrag
-
-EXPOSE 8000
-
-# Health check
-HEALTHCHECK --interval=30s --timeout=10s --start-period=5s --retries=3 \
-    CMD curl -f http://localhost:8000/health || exit 1
-
-CMD ["python", "-m", "kssrag.cli", "server", "--host", "0.0.0.0", "--port", "8000"]
-```
-
-### Kubernetes Deployment
-
-```yaml
-# k8s-deployment.yaml
-apiVersion: apps/v1
-kind: Deployment
-metadata:
-  name: kssrag
-  labels:
-    app: kssrag
-spec:
-  replicas: 3
-  selector:
-    matchLabels:
-      app: kssrag
-  template:
-    metadata:
-      labels:
-        app: kssrag
-    spec:
-      containers:
-      - name: kssrag
-        image: kssrag:latest
-        ports:
-        - containerPort: 8000
-        env:
-        - name: OPENROUTER_API_KEY
-          valueFrom:
-            secretKeyRef:
-              name: kssrag-secrets
-              key: openrouter-api-key
-        - name: VECTOR_STORE_TYPE
-          value: "hybrid_offline"
-        resources:
-          requests:
-            memory: "1Gi"
-            cpu: "500m"
-          limits:
-            memory: "2Gi"
-            cpu: "1000m"
-        livenessProbe:
-          httpGet:
-            path: /health
-            port: 8000
-          initialDelaySeconds: 30
-          periodSeconds: 10
-        readinessProbe:
-          httpGet:
-            path: /health
-            port: 8000
-          initialDelaySeconds: 5
-          periodSeconds: 5
----
-apiVersion: v1
-kind: Service
-metadata:
-  name: kssrag-service
-spec:
-  selector:
-    app: kssrag
-  ports:
-  - port: 80
-    targetPort: 8000
-  type: LoadBalancer
-```
-
-### Production Configuration
-
-```python
-# production_config.py
-from kssrag import Config, VectorStoreType
-
-production_config = Config(
-    OPENROUTER_API_KEY=os.getenv("OPENROUTER_API_KEY"),
+config = Config(
+    OPENROUTER_API_KEY="your-key",
     VECTOR_STORE_TYPE=VectorStoreType.HYBRID_OFFLINE,
-    CHUNK_SIZE=1000,
+    CHUNK_SIZE=800,
     TOP_K=8,
-    BATCH_SIZE=32,
-    ENABLE_CACHE=True,
-    CACHE_DIR="/var/lib/kssrag/cache",
-    LOG_LEVEL="INFO",
-    SERVER_HOST="0.0.0.0",
-    SERVER_PORT=8000,
-    CORS_ORIGINS=[
-        "https://app.company.com",
-        "https://api.company.com"
-    ]
+)
+
+rag = KSSRAG(config=config)
+rag.load_document("technical_docs.pdf")
+
+# Blocking query
+print(rag.query("What are the technical specifications?"))
+
+# Streaming query
+for chunk in rag.agent.query_stream("Walk me through the architecture.", top_k=8):
+    print(chunk, end="", flush=True)
+```
+
+> **Note:** the `KSSRAG` class auto-detects `.txt`, `.json`, and `.pdf`. For images and Office documents, use the CLI or construct the matching chunker (`ImageChunker`, `OfficeChunker`) directly.
+
+### Custom components
+
+Any pipeline stage can be replaced with your own class — no fork needed. Point config at an import path:
+
+```python
+config = Config(
+    CUSTOM_VECTOR_STORE="my_module.MyVectorStore",
+    CUSTOM_RETRIEVER="my_module.MyRetriever",
+    CUSTOM_LLM="my_module.MyLLM",
 )
 ```
 
-## Contributing
+Custom vector stores subclass `BaseVectorStore` (`add_documents` / `retrieve` / `persist` / `load`); retrievers subclass `BaseRetriever` (`retrieve`).
 
-We welcome contributions from the community. Please see our [Contributing Guide](CONTRIBUTING.md) for details.
+## Serve as an embedded API
 
-### Development Setup
+```python
+from kssrag import KSSRAG
+import uvicorn
+
+rag = KSSRAG()
+rag.load_document("knowledge.txt")
+app, server_config = rag.create_server()
+uvicorn.run(app, host="0.0.0.0", port=8000)
+```
+
+### Endpoints
+
+| Endpoint | Method | Description |
+|----------|--------|-------------|
+| `/query` | POST | Query the RAG system (`query`, `session_id`) |
+| `/stream` | POST | Streaming query via Server-Sent Events |
+| `/health` | GET | Health check |
+| `/config` | GET | Active server configuration |
+| `/sessions/{id}/clear` | GET | Clear a session's conversation history |
+
+Each `session_id` gets its own conversation state (held in memory for the life of the server process). CORS is configurable via environment variables.
+
+## Architecture
+
+The pipeline: **load → chunk → vector store → retriever → agent → LLM**. Each stage is swappable by config or replaceable with a custom class.
+
+```
+Document ──> Chunker ──> Vector Store ──> Retriever ──┐
+                                                       ├──> RAG Agent ──> OpenRouter LLM ──> Response (stream / blocking)
+                              Query ───────────────────┘
+```
+
+### Vector stores
+
+| Store | Method | Needs model download? | Best for |
+|-------|--------|:---:|----------|
+| `bm25` | Keyword (BM25Okapi) | No | Fast keyword search |
+| `bm25s` | Stemmed BM25 (bm25s lib) | No | Faster BM25 with stemming |
+| `tfidf` | TF-IDF + cosine | No | Statistical relevance |
+| `faiss` | Dense embeddings (SentenceTransformers) | Yes | Semantic search |
+| `hybrid_online` | BM25 + FAISS, embedding-reranked | Yes | Best semantic quality |
+| `hybrid_offline` | BM25 + TF-IDF, score-fused | **No** | Semantic-ish quality, zero downloads, air-gapped |
+
+`hybrid_offline` is the default — it needs no network access or model download, which makes it a solid choice for restricted environments.
+
+### Chunkers
+
+`TextChunker` (character windows with overlap) is the base. `PDFChunker`, `ImageChunker` (OCR), and `OfficeChunker` extract text and delegate to it; `JSONChunker` flattens records keyed on a `name` field. Every chunk is a `{"content", "metadata"}` dict carried through the whole pipeline.
+
+### Conversation memory
+
+To keep long conversations from blowing up context windows, the agent maintains **rolling summaries**: after a couple of exchanges it asks the model to append a compact `[SUMMARY_START]...[SUMMARY_END]` block to each response, extracts and stores it, and strips it before the user ever sees it. Streaming is marker-aware — it buffers around partial markers at chunk boundaries so a summary can never leak mid-stream. Older raw turns are trimmed while their summaries are retained, so the agent "remembers" the gist without paying for the full transcript.
+
+### FAISS loading
+
+FAISS is imported lazily and only when a FAISS-backed store is actually used. It probes AVX512 → AVX2 → standard builds in order, so it runs on machines without AVX2 (including many Windows setups) instead of hard-failing at import.
+
+## Configuration
+
+Everything is configurable through environment variables (`.env`) or the `Config` object. Highlights:
 
 ```bash
-# Clone repository
+OPENROUTER_API_KEY=your_key
+DEFAULT_MODEL=deepseek/deepseek-chat-v3.1:free
+FALLBACK_MODELS=deepseek/deepseek-r1:free,deepseek/deepseek-chat
+
+CHUNK_SIZE=500
+CHUNK_OVERLAP=50
+VECTOR_STORE_TYPE=hybrid_offline
+RETRIEVER_TYPE=simple
+TOP_K=5
+
+SERVER_HOST=localhost
+SERVER_PORT=8000
+CORS_ORIGINS=*
+```
+
+See `.env.example` for the complete list, including OCR mode, batch size, fuzzy-match threshold, CORS details, and custom-component import paths.
+
+## Development
+
+```bash
 git clone https://github.com/Ksschkw/kssrag
 cd kssrag
-
-# Install development dependencies
 pip install -e .[dev,ocr,all]
 
-# Run test suite
-python -m pytest tests/ -v --cov=kssrag
+python -m pytest tests/ -v        # run tests
+python -m pytest tests/test_basic.py::test_text_rag -v   # single test
 
-# Code quality checks
-black kssrag/ tests/
-flake8 kssrag/
-mypy kssrag/
-
-# Build documentation
-cd docs && make html
+black kssrag/ tests/             # format
+flake8 kssrag/                   # lint
+mypy kssrag/                     # type-check
 ```
 
-### Code Organization
+## Acknowledgments
 
-```
-kssrag/
-├── core/                   # Core framework components
-│   ├── chunkers.py         # Document segmentation strategies
-│   ├── vectorstores.py     # Vector database implementations
-│   ├── retrievers.py       # Information retrieval algorithms
-│   └── agents.py           # RAG orchestration logic
-├── models/                 # LLM provider integrations
-│   ├── openrouter.py       # OpenRouter API client
-│   └── local_llms.py       # Local LLM implementations
-├── utils/                  # Utility functions
-│   ├── helpers.py          # Common utilities
-│   ├── document_loaders.py # Document parsing
-│   ├── ocr_loader.py       # OCR processing (PaddleOCR/Tesseract)
-│   └── preprocessors.py    # Text preprocessing
-├── config.py               # Configuration management
-├── server.py               # FastAPI web server
-├── cli.py                  # Command-line interface
-└── __init__.py             # Package exports
-```
+Built on [FAISS](https://github.com/facebookresearch/faiss), [PaddleOCR](https://github.com/PaddlePaddle/PaddleOCR), [SentenceTransformers](https://github.com/UKPLab/sentence-transformers), [rank-bm25](https://github.com/dorianbrown/rank_bm25) / [bm25s](https://github.com/xhluca/bm25s), and [OpenRouter](https://openrouter.ai/).
 
-## Support
+## Links
 
-### Documentation
-- [**Full Documentation**](https://github.com/Ksschkw/kssrag/docs)
-- [**API Reference**](https://github.com/Ksschkw/kssrag/docs/api_reference.md)
-- [**Examples Directory**](https://github.com/Ksschkw/kssrag/examples)
-- [**PyPi**](https://pypi.org/project/kssrag/0.2.4/)
-
-### Community
-- [**GitHub Issues**](https://github.com/Ksschkw/kssrag/issues) - Bug reports and feature requests
-- [**Discussions**](https://github.com/Ksschkw/kssrag/discussions) - Community support and ideas
-- [**Releases**](https://github.com/Ksschkw/kssrag/releases) - Release notes and updates
-
-### Acknowledgments
-
-This project builds upon several outstanding open-source projects:
-
-- [**FAISS**](https://github.com/facebookresearch/faiss) - Efficient similarity search
-- [**PaddleOCR**](https://github.com/PaddlePaddle/PaddleOCR) - Advanced OCR capabilities
-- [**SentenceTransformers**](https://github.com/UKPLab/sentence-transformers) - Text embeddings
-- [**OpenRouter**](https://openrouter.ai/) - Unified LLM API access
+- [PyPI](https://pypi.org/project/kssrag/)
+- [Issues](https://github.com/Ksschkw/kssrag/issues)
+- [Documentation](docs/)
 
 ## License
 
-This project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details.
-
----
-
-<div align="center">
-
-**KSS RAG** - Enterprise-Grade Retrieval-Augmented Generation  
-*Built with precision for production environments*
-
-[Get Started](#quick-start) • [Explore Features](#features) • [View Examples](#examples)
-
-</div>
+MIT — see [LICENSE](LICENSE).
