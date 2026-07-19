@@ -4,7 +4,7 @@ Main KSSRAG class that ties everything together for easy usage.
 from typing import Optional, List, Dict, Any
 import os
 from .core.chunkers import TextChunker, JSONChunker, PDFChunker
-from .core.vectorstores import BM25VectorStore, FAISSVectorStore, TFIDFVectorStore, HybridVectorStore, HybridOfflineVectorStore
+from .core.vectorstores import BM25VectorStore, BM25SVectorStore, FAISSVectorStore, TFIDFVectorStore, HybridVectorStore, HybridOfflineVectorStore
 from .core.retrievers import SimpleRetriever, HybridRetriever
 from .core.agents import RAGAgent
 from .models.openrouter import OpenRouterLLM
@@ -83,6 +83,8 @@ class KSSRAG:
         else:
             if self.config.VECTOR_STORE_TYPE == VectorStoreType.BM25:
                 self.vector_store = BM25VectorStore()
+            elif self.config.VECTOR_STORE_TYPE == VectorStoreType.BM25S:
+                self.vector_store = BM25SVectorStore()
             elif self.config.VECTOR_STORE_TYPE == VectorStoreType.FAISS:
                 self.vector_store = FAISSVectorStore()
             elif self.config.VECTOR_STORE_TYPE == VectorStoreType.TFIDF:
@@ -91,6 +93,10 @@ class KSSRAG:
                 self.vector_store = HybridVectorStore()
             elif self.config.VECTOR_STORE_TYPE == VectorStoreType.HYBRID_OFFLINE:
                 self.vector_store = HybridOfflineVectorStore()
+            else:
+                raise ValueError(
+                    f"Unsupported vector store type: {self.config.VECTOR_STORE_TYPE}"
+                )
             self.documents = _build_documents()
             self.vector_store.add_documents(self.documents)
 
