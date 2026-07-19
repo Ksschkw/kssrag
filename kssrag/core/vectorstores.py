@@ -3,7 +3,7 @@ import os
 import re
 import pickle
 import numpy as np
-from rank_bm25 import BM25Okapi
+from .bm25 import BM25Okapi
 from sklearn.feature_extraction.text import TfidfVectorizer
 from sklearn.metrics.pairwise import cosine_similarity
 import scipy.sparse as sp
