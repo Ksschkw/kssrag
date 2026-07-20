@@ -11,36 +11,51 @@ KSS RAG provides extensive configuration options to tailor the framework for you
 Create a `.env` file in your project root:
 
 ```bash
-# Required - OpenRouter API Configuration
+# LLM Provider (see the LLM Providers table below)
+PROVIDER=openrouter
+# API key for the selected provider. If unset, the provider's own env var is used
+# (GROQ_API_KEY, OPENAI_API_KEY, ANTHROPIC_API_KEY, ...), falling back to OPENROUTER_API_KEY.
+LLM_API_KEY=
+# Only needed for PROVIDER=custom, or to override a preset's endpoint:
+LLM_BASE_URL=https://openrouter.ai/api/v1/chat/completions
+
+# OpenRouter key (used when PROVIDER=openrouter)
 OPENROUTER_API_KEY=your_openrouter_api_key_here
 
 # Model Configuration
-DEFAULT_MODEL=anthropic/claude-3-sonnet
-FALLBACK_MODELS=deepseek/deepseek-chat-v3.1:free,google/gemini-pro-1.5,meta-llama/llama-3-70b-instruct
+DEFAULT_MODEL=deepseek/deepseek-chat-v3.1:free
+FALLBACK_MODELS=deepseek/deepseek-r1:free,deepseek/deepseek-chat
+
+# LLM generation parameters
+LLM_TEMPERATURE=0.7
+LLM_MAX_TOKENS=1024
+LLM_TIMEOUT=30
+LLM_STREAM_TIMEOUT=60
 
 # Document Processing
-CHUNK_SIZE=800
-CHUNK_OVERLAP=100
+CHUNK_SIZE=500
+CHUNK_OVERLAP=50
 CHUNKER_TYPE=text
 
 # Vector Store Configuration
-VECTOR_STORE_TYPE=hybrid_online
+VECTOR_STORE_TYPE=hybrid_offline
 FAISS_MODEL_NAME=sentence-transformers/all-MiniLM-L6-v2
 
 # Retrieval Configuration
-RETRIEVER_TYPE=hybrid
-TOP_K=8
-FUZZY_MATCH_THRESHOLD=85
+RETRIEVER_TYPE=simple
+TOP_K=5
+FUZZY_MATCH_THRESHOLD=80
 
 # Performance Configuration
 BATCH_SIZE=64
 MAX_DOCS_FOR_TESTING=
 ENABLE_CACHE=true
-CACHE_DIR=.rag_cache
+CACHE_DIR=  # defaults to a per-user cache dir (~/.cache/kssrag)
 
 # Server Configuration
 SERVER_HOST=localhost
 SERVER_PORT=8000
+MAX_SESSIONS=1000
 CORS_ORIGINS=*
 CORS_ALLOW_CREDENTIALS=true
 CORS_ALLOW_METHODS=GET,POST,PUT,DELETE,OPTIONS
@@ -48,7 +63,7 @@ CORS_ALLOW_HEADERS=Content-Type,Authorization
 
 # OCR Configuration
 OCR_DEFAULT_MODE=typed
-ENABLE_STREAMING=true
+ENABLE_STREAMING=false
 
 # Logging Configuration
 LOG_LEVEL=INFO
@@ -101,27 +116,47 @@ config = Config(
 
 ## Configuration Reference
 
-### API Configuration
+### LLM Provider Configuration
+
+KSS RAG talks to any LLM provider through a single `PROVIDER` setting (or the
+`--provider` CLI flag). OpenRouter is the default.
 
 | Parameter | Type | Default | Description |
 |-----------|------|---------|-------------|
-| `OPENROUTER_API_KEY` | string | Required | Your OpenRouter API key |
-| `DEFAULT_MODEL` | string | `anthropic/claude-3-sonnet` | Primary LLM model |
-| `FALLBACK_MODELS` | List[string] | Multiple fallbacks | Models to try if primary fails |
+| `PROVIDER` | string | `openrouter` | Provider preset name, or `custom` |
+| `LLM_API_KEY` | string | None | Key for the selected provider (see resolution below) |
+| `LLM_BASE_URL` | string | OpenRouter URL | Endpoint override (required for `custom`) |
+| `OPENROUTER_API_KEY` | string | `""` | OpenRouter key / legacy fallback key |
+| `DEFAULT_MODEL` | string | `deepseek/deepseek-chat` | Primary model id |
+| `FALLBACK_MODELS` | List[string] | DeepSeek models | Models to try if the primary fails |
+| `LLM_TEMPERATURE` | float | 0.7 | Sampling temperature (0.0–2.0) |
+| `LLM_MAX_TOKENS` | int | 1024 | Max tokens per response |
+| `LLM_TIMEOUT` | int | 30 | Non-streaming request timeout (s) |
+| `LLM_STREAM_TIMEOUT` | int | 60 | Streaming request timeout (s) |
 
-**Example Models:**
+**Supported providers:**
+
+| Kind | Names |
+|------|-------|
+| Hosted (OpenAI-compatible) | `openrouter`, `openai`, `groq`, `together`, `deepseek`, `fireworks`, `mistral`, `perplexity`, `xai`, `deepinfra`, `anyscale` |
+| Native protocol | `anthropic`, `ollama` |
+| Local (no key) | `ollama-openai`, `lmstudio`, `vllm`, `llamacpp` |
+| Custom endpoint | `custom` (set `LLM_BASE_URL`) |
+
+**API key resolution order:** explicit `api_key` / `--api-key` → `LLM_API_KEY` →
+the provider's own env var (e.g. `GROQ_API_KEY`) → `OPENROUTER_API_KEY`. Local
+providers need no key.
+
+**From code:**
+
 ```python
-# Premium models (higher cost, better quality)
-DEFAULT_MODEL="anthropic/claude-3-sonnet"
-DEFAULT_MODEL="openai/gpt-4"
+from kssrag import create_llm
 
-# Balanced models
-DEFAULT_MODEL="google/gemini-pro-1.5"
-DEFAULT_MODEL="meta-llama/llama-3-70b-instruct"
-
-# Cost-effective models
-DEFAULT_MODEL="deepseek/deepseek-chat-v3.1:free"
-DEFAULT_MODEL="microsoft/wizardlm-2-8x22b"
+llm = create_llm(provider="groq", model="llama-3.3-70b-versatile")
+llm = create_llm(provider="ollama", model="llama3")            # local, no key
+llm = create_llm(provider="anthropic", model="claude-sonnet-4-6")
+llm = create_llm(provider="custom",
+                 base_url="http://localhost:8000/v1/chat/completions", model="m")
 ```
 
 ### Document Processing Configuration
@@ -197,8 +232,8 @@ FAISS_MODEL_NAME="sentence-transformers/paraphrase-multilingual-MiniLM-L12-v2"
 | Parameter | Type | Default | Description |
 |-----------|------|---------|-------------|
 | `BATCH_SIZE` | int | 64 | Documents per processing batch |
-| `ENABLE_CACHE` | bool | true | Enable vector store caching |
-| `CACHE_DIR` | string | `.cache` | Cache directory path |
+| `ENABLE_CACHE` | bool | true | Enable index caching (reuse built indexes) |
+| `CACHE_DIR` | string | `~/.cache/kssrag` | Cache directory (platform-appropriate default) |
 | `MAX_DOCS_FOR_TESTING` | int | None | Limit documents for testing |
 
 ### Server Configuration
@@ -207,6 +242,7 @@ FAISS_MODEL_NAME="sentence-transformers/paraphrase-multilingual-MiniLM-L12-v2"
 |-----------|------|---------|-------------|
 | `SERVER_HOST` | string | `localhost` | Server bind address |
 | `SERVER_PORT` | int | 8000 | Server port |
+| `MAX_SESSIONS` | int | 1000 | Max in-memory conversation sessions (LRU eviction) |
 | `CORS_ORIGINS` | List[string] | `["*"]` | Allowed CORS origins |
 | `CORS_ALLOW_CREDENTIALS` | bool | true | Allow CORS credentials |
 | `CORS_ALLOW_METHODS` | List[string] | Multiple | Allowed HTTP methods |
