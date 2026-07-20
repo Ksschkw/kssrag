@@ -2,6 +2,12 @@ import pytest
 import tempfile
 import os
 from unittest.mock import Mock, patch, MagicMock
+
+# OCR depends on optional extras (opencv, paddleocr, tesseract). Skip the whole
+# module cleanly if they're absent, rather than aborting collection of all tests.
+pytest.importorskip("cv2")
+pytest.importorskip("paddleocr")
+
 from kssrag.utils.ocr_loader import OCRLoader
 
 def test_ocr_loader_initialization():
