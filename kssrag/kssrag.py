@@ -8,6 +8,7 @@ from .core.vectorstores import BM25VectorStore, BM25SVectorStore, FAISSVectorSto
 from .core.retrievers import SimpleRetriever, HybridRetriever
 from .core.agents import RAGAgent
 from .models.openrouter import OpenRouterLLM
+from .models.factory import create_llm
 from .utils.document_loaders import load_document, load_json_documents
 from .config import Config, VectorStoreType, ChunkerType, RetrieverType
 from .utils.helpers import logger, validate_config, import_custom_component
@@ -114,12 +115,22 @@ class KSSRAG:
                     entity_names = [doc['metadata'].get('name', '') for doc in self.documents if doc['metadata'].get('name')]
                 self.retriever = HybridRetriever(self.vector_store, entity_names)
         
-        # Create LLM
+        # Create LLM. Building the index shouldn't require an LLM key (retrieval
+        # works without one), so a missing-key error is deferred to query time.
         if self.config.CUSTOM_LLM:
             llm_class = import_custom_component(self.config.CUSTOM_LLM)
             llm = llm_class()
         else:
-            llm = OpenRouterLLM()
+            try:
+                llm = create_llm(
+                    provider=self.config.PROVIDER,
+                    model=self.config.DEFAULT_MODEL,
+                    fallback_models=self.config.FALLBACK_MODELS,
+                    cfg=self.config,
+                )
+            except ValueError as e:
+                logger.warning(f"LLM not configured yet: {e}")
+                llm = None
         
         # Create agent
         self.agent = RAGAgent(self.retriever, llm)

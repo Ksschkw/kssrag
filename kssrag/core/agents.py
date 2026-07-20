@@ -231,6 +231,11 @@ class RAGAgent:
     
     def query(self, question: str, top_k: int = 5, include_context: bool = True) -> str:
         """Process a query with stealth conversation summarization"""
+        if self.llm is None:
+            raise LLMError(
+                "No LLM configured. Set an API key (e.g. OPENROUTER_API_KEY) or "
+                "provider before querying."
+            )
         try:
             # Retrieve relevant context
             logger.info(f" QUERY START: '{question}' (top_k: {top_k})")
@@ -280,6 +285,11 @@ class RAGAgent:
         """
         Professional-grade streaming with multiple fallback strategies
         """
+        if self.llm is None:
+            raise LLMError(
+                "No LLM configured. Set an API key (e.g. OPENROUTER_API_KEY) or "
+                "provider before querying."
+            )
         try:
             logger.info(f" STREAMING QUERY START: '{question}'")
             

@@ -7,6 +7,12 @@ from .core.vectorstores import BM25VectorStore, FAISSVectorStore, TFIDFVectorSto
 from .core.retrievers import SimpleRetriever, HybridRetriever
 from .core.agents import RAGAgent
 from .models.openrouter import OpenRouterLLM
+from .models.openai_compatible import OpenAICompatibleLLM
+from .models.ollama import OllamaLLM
+from .models.anthropic import AnthropicLLM
+from .models.factory import create_llm
+from .models.providers import list_providers
+from .models.base import BaseLLM, LLMError
 from .utils.document_loaders import load_document, load_json_documents
 from .utils.helpers import logger, validate_config
 from .config import Config, VectorStoreType, ChunkerType, RetrieverType
@@ -35,6 +41,13 @@ __all__ = [
     'HybridRetriever',
     'RAGAgent',
     'OpenRouterLLM',
+    'OpenAICompatibleLLM',
+    'OllamaLLM',
+    'AnthropicLLM',
+    'BaseLLM',
+    'LLMError',
+    'create_llm',
+    'list_providers',
     'load_document',
     'load_json_documents',
     'Config',

@@ -7,6 +7,7 @@ from .core.vectorstores import BM25SVectorStore, BM25VectorStore, FAISSVectorSto
 from .core.retrievers import SimpleRetriever, HybridRetriever
 from .core.agents import RAGAgent
 from .models.openrouter import OpenRouterLLM
+from .models.factory import create_llm
 from .config import config
 from .utils.helpers import logger, validate_config
 
@@ -29,10 +30,15 @@ def main():
                          help="Enable streaming response")
     query_parser.add_argument("--top-k", type=int, default=config.TOP_K, help="Number of results to retrieve")
     query_parser.add_argument("--system-prompt", type=str, help="Path to a file containing the system prompt or the prompt text itself")
-    query_parser.add_argument("--ocr-mode", type=str, choices=["typed", "handwritten"], 
+    query_parser.add_argument("--ocr-mode", type=str, choices=["typed", "handwritten"],
                          default=config.OCR_DEFAULT_MODE,
                          help="OCR mode for image processing")
-    
+    query_parser.add_argument("--provider", type=str, default=config.PROVIDER,
+                         help="LLM provider preset (openrouter, openai, groq, ollama, anthropic, ...) or 'custom'")
+    query_parser.add_argument("--model", type=str, default=None, help="Model id (overrides DEFAULT_MODEL)")
+    query_parser.add_argument("--base-url", type=str, default=None, help="Override the provider's chat endpoint URL")
+    query_parser.add_argument("--api-key", type=str, default=None, help="API key (overrides env-var resolution)")
+
     # Server command
     server_parser = subparsers.add_parser("server", help="Start the RAG API server")
     server_parser.add_argument("--file", type=str, required=True, help="Path to document file")
@@ -46,7 +52,12 @@ def main():
     server_parser.add_argument("--port", type=int, default=config.SERVER_PORT, help="Port to run server on")
     server_parser.add_argument("--host", type=str, default=config.SERVER_HOST, help="Host to run server on")
     server_parser.add_argument("--system-prompt", type=str, help="Path to a file containing the system prompt or the prompt text itself")
-    
+    server_parser.add_argument("--provider", type=str, default=config.PROVIDER,
+                          help="LLM provider preset (openrouter, openai, groq, ollama, anthropic, ...) or 'custom'")
+    server_parser.add_argument("--model", type=str, default=None, help="Model id (overrides DEFAULT_MODEL)")
+    server_parser.add_argument("--base-url", type=str, default=None, help="Override the provider's chat endpoint URL")
+    server_parser.add_argument("--api-key", type=str, default=None, help="API key (overrides env-var resolution)")
+
     args = parser.parse_args()
     vector_store_type = args.vector_store if hasattr(args, 'vector_store') else config.VECTOR_STORE_TYPE
     
@@ -112,7 +123,13 @@ def main():
         
         # Create retriever and agent
         retriever = SimpleRetriever(vector_store)
-        llm = OpenRouterLLM()
+        llm = create_llm(
+            provider=args.provider,
+            model=args.model,
+            base_url=args.base_url,
+            api_key=args.api_key,
+            stream=getattr(args, "stream", False),
+        )
         system_prompt = load_system_prompt(args.system_prompt)
         agent = RAGAgent(retriever, llm, system_prompt=system_prompt)
         
@@ -180,7 +197,13 @@ def main():
         
         # Create retriever and agent
         retriever = SimpleRetriever(vector_store)
-        llm = OpenRouterLLM()
+        llm = create_llm(
+            provider=args.provider,
+            model=args.model,
+            base_url=args.base_url,
+            api_key=args.api_key,
+            stream=getattr(args, "stream", False),
+        )
         system_prompt = load_system_prompt(args.system_prompt)
         agent = RAGAgent(retriever, llm, system_prompt=system_prompt)
         
