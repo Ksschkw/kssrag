@@ -44,10 +44,25 @@ class RetrieverType(str, Enum):
 class Config(BaseSettings):
     """Configuration settings for KSS RAG with extensive customization options"""
     
-    # OpenRouter settings
+    # LLM provider settings
     OPENROUTER_API_KEY: str = Field(
         default=os.getenv("OPENROUTER_API_KEY", ""),
         description="Your OpenRouter API key for accessing LLMs"
+    )
+
+    PROVIDER: str = Field(
+        default=os.getenv("PROVIDER", "openrouter"),
+        description="LLM provider preset name (openrouter, openai, groq, ollama, anthropic, ...) or 'custom'"
+    )
+
+    LLM_BASE_URL: str = Field(
+        default=os.getenv("LLM_BASE_URL", "https://openrouter.ai/api/v1/chat/completions"),
+        description="Chat completions endpoint URL (auto-filled from PROVIDER unless overridden)"
+    )
+
+    LLM_API_KEY: Optional[str] = Field(
+        default=os.getenv("LLM_API_KEY"),
+        description="API key for the selected provider (falls back to the provider's own env var, or OPENROUTER_API_KEY)"
     )
     
     DEFAULT_MODEL: str = Field(
