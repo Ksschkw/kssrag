@@ -19,7 +19,7 @@ KSS RAG is a Retrieval-Augmented Generation framework built around one idea: get
 
 Point the CLI at a source-of-truth document, hand it a system prompt, and it loads, chunks, indexes, and serves a FastAPI endpoint with Server-Sent Events streaming and per-session conversation memory. The same pipeline is available as a Python API and a one-shot CLI query when you don't need a server.
 
-It's provider-light by design: LLM calls go through [OpenRouter](https://openrouter.ai/), so you can swap between models (DeepSeek, Claude, GPT, and others) by changing one env var, with automatic fallback to backup models when one is unavailable.
+It's provider-flexible by design: point it at any LLM provider — hosted (OpenRouter, OpenAI, Groq, Together, DeepSeek, Anthropic, and more) or local (Ollama, LM Studio, vLLM) — by setting one env var or one CLI flag, with automatic fallback to backup models when one is unavailable. See [LLM Providers](#llm-providers).
 
 ## Why KSS RAG
 
@@ -109,6 +109,53 @@ python -m kssrag.cli query \
 
 > **Note:** the `server` subcommand currently loads `text`, `json`, and `pdf` formats. Image and Office formats are supported by the `query` subcommand.
 
+## LLM Providers
+
+KSS RAG talks to any LLM provider through a single `--provider` flag (or the `PROVIDER` env var). OpenRouter is the default.
+
+```bash
+# Groq (hosted, OpenAI-compatible)
+kssrag query --file docs.txt --query "..." --provider groq --model llama-3.3-70b-versatile
+
+# OpenAI
+kssrag query --file docs.txt --query "..." --provider openai --model gpt-4o
+
+# Anthropic (native Messages API)
+kssrag query --file docs.txt --query "..." --provider anthropic --model claude-sonnet-4-6
+
+# Local Ollama — no API key needed
+kssrag query --file docs.txt --query "..." --provider ollama --model llama3
+
+# Any custom OpenAI-compatible endpoint
+kssrag query --file docs.txt --query "..." --provider custom \
+    --base-url http://my-host:8000/v1/chat/completions --model my-model
+```
+
+### Supported providers
+
+| Kind | Providers |
+|------|-----------|
+| Hosted (OpenAI-compatible) | `openrouter`, `openai`, `groq`, `together`, `deepseek`, `fireworks`, `mistral`, `perplexity`, `xai`, `deepinfra`, `anyscale` |
+| Native protocol | `anthropic` (Claude Messages API), `ollama` (`/api/chat`) |
+| Local (OpenAI-compatible, no key) | `ollama-openai`, `lmstudio`, `vllm`, `llamacpp` |
+| Anything else | `custom` (supply `--base-url`) |
+
+### API keys
+
+Set the key via `LLM_API_KEY`, or the provider's own env var (`GROQ_API_KEY`, `OPENAI_API_KEY`, `ANTHROPIC_API_KEY`, ...), or `--api-key`. Local providers need no key. Selection precedence: `--api-key` > `LLM_API_KEY` > provider env var > `OPENROUTER_API_KEY`.
+
+### From Python
+
+```python
+from kssrag import create_llm, RAGAgent
+
+llm = create_llm(provider="groq", model="llama-3.3-70b-versatile")
+# or: create_llm(provider="ollama", model="llama3")
+# or: create_llm(provider="custom", base_url="http://localhost:8000/v1/chat/completions", model="m")
+```
+
+All providers share one interface (`predict` / `predict_stream`), so streaming, fallback models, and conversation memory work identically regardless of provider.
+
 ## Python API
 
 ```python
@@ -178,7 +225,7 @@ The pipeline: **load → chunk → vector store → retriever → agent → LLM*
 
 ```
 Document ──> Chunker ──> Vector Store ──> Retriever ──┐
-                                                       ├──> RAG Agent ──> OpenRouter LLM ──> Response (stream / blocking)
+                                                       ├──> RAG Agent ──> LLM (any provider) ──> Response (stream / blocking)
                               Query ───────────────────┘
 ```
 
@@ -246,7 +293,7 @@ mypy kssrag/                     # type-check
 
 ## Acknowledgments
 
-Built on [FAISS](https://github.com/facebookresearch/faiss), [PaddleOCR](https://github.com/PaddlePaddle/PaddleOCR), [SentenceTransformers](https://github.com/UKPLab/sentence-transformers), [rank-bm25](https://github.com/dorianbrown/rank_bm25) / [bm25s](https://github.com/xhluca/bm25s), and [OpenRouter](https://openrouter.ai/).
+Built on [FAISS](https://github.com/facebookresearch/faiss), [PaddleOCR](https://github.com/PaddlePaddle/PaddleOCR), [SentenceTransformers](https://github.com/UKPLab/sentence-transformers), [bm25s](https://github.com/xhluca/bm25s), and a range of LLM providers via [OpenRouter](https://openrouter.ai/) and OpenAI-compatible / native APIs.
 
 ## Links
 
