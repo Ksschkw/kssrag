@@ -503,10 +503,11 @@ class ImageChunker(BaseChunker):
 ```python
 class OpenRouterLLM:
     """
-    OpenRouter LLM provider with streaming support.
-    
-    Provides access to 100+ language models through OpenRouter API.
-    Includes smart fallbacks and comprehensive error handling.
+    OpenRouter LLM preset (a thin subclass of OpenAICompatibleLLM).
+
+    Kept for backward compatibility. For other providers use `create_llm`
+    (see the LLM Providers section). Provides access to models through the
+    OpenRouter API with smart fallbacks and error handling.
     
     Example:
         >>> from kssrag.models.openrouter import OpenRouterLLM

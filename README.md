@@ -4,7 +4,7 @@
 
 ![Python Version](https://img.shields.io/badge/python-3.8%2B-blue)
 ![License](https://img.shields.io/badge/license-MIT-green)
-![Version](https://img.shields.io/badge/version-0.2.5-brightgreen)
+![Version](https://img.shields.io/badge/version-0.3.0-brightgreen)
 ![Framework](https://img.shields.io/badge/framework-RAG-orange)
 
 **Stand up a streaming RAG API from a single document with one command.**
