@@ -2,26 +2,27 @@
 
 ## Overview
 
-This guide provides comprehensive performance optimization strategies for KSS RAG, covering everything from basic configuration tuning to advanced scaling techniques.
+This guide provides performance optimization strategies for KSS RAG, covering configuration tuning and scaling techniques.
 
-## Performance Benchmarks
+> **Note:** The tables below are rough, illustrative ballparks — **not** measured benchmarks on a fixed setup. Actual performance depends heavily on your hardware, chosen vector store (BM25/TF-IDF are far lighter than FAISS embeddings), model provider latency, and document sizes. Measure on your own data; the [retrieval evaluation harness](api_reference.md#retrieval-evaluation) helps compare retrieval quality across stores.
 
-### Baseline Performance
+## Illustrative Performance Ranges
+
+### Indicative Latency
 
 | Operation | Small Instance | Medium Instance | Large Instance |
 |-----------|----------------|-----------------|----------------|
 | Document Indexing | 5-10 sec/1000 chunks | 2-5 sec/1000 chunks | 1-3 sec/1000 chunks |
 | Query Processing | 1000-2000 ms | 500-1000 ms | 200-500 ms |
-| OCR Processing | 3-5 sec/image | 2-3 sec/image ((Handwritten would take longer)) | 1-2 sec/image (Handwritten would take longer) |
-| Memory Usage | 250Mb - 1gb | 1-4 GB | 4-8 GB |
+| OCR Processing | 3-5 sec/image | 2-3 sec/image (handwritten slower) | 1-2 sec/image (handwritten slower) |
+| Memory Usage | 250 MB - 1 GB | 1-4 GB | 4-8 GB |
 
-### Throughput Metrics
+### Indicative Throughput
 
-| Metric | Value | Optimization Target |
-|--------|-------|-------------------|
-| Queries per Second | 10-50 QPS | 50-100 QPS |
-| Concurrent Users | 50-100 | 100-500 |
-| Document Processing | 100-200 docs/min | 200-500 docs/min |
+| Metric | Range |
+|--------|-------|
+| Queries per Second | workload-dependent; the server runs blocking LLM calls in a threadpool so requests are concurrent |
+| Document Processing | 100-500 docs/min depending on store and chunk size |
 
 ## Configuration Tuning
 

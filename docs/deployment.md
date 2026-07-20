@@ -600,7 +600,7 @@ async def health_check():
     health_status = {
         "status": "healthy",
         "timestamp": datetime.utcnow().isoformat(),
-        "version": "0.2.0",
+        "version": "0.3.0",
         "components": {
             "vector_store": check_vector_store_health(),
             "llm_connection": check_llm_health(),
