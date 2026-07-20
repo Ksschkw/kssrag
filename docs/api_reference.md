@@ -595,6 +595,78 @@ class OCRLoader:
         """
 ```
 
+## LLM Providers
+
+All LLM adapters implement a common interface (`BaseLLM`): `predict(messages) -> str`
+and `predict_stream(messages) -> Generator[str, None, None]`. Build one with the
+factory rather than instantiating adapters directly.
+
+### create_llm
+
+```python
+from kssrag import create_llm
+
+def create_llm(
+    provider: str | None = None,     # preset name or "custom" (default: config.PROVIDER)
+    model: str | None = None,        # model id (default: config.DEFAULT_MODEL)
+    base_url: str | None = None,     # endpoint override (required for "custom")
+    api_key: str | None = None,      # key override
+    fallback_models: list[str] | None = None,
+    stream: bool = False,
+    cfg=None,                        # Config instance to read defaults from
+    **kwargs,
+) -> BaseLLM:
+    """Return the adapter for the given provider, resolving base_url and API key."""
+```
+
+### Adapters
+
+| Class | Used for |
+|-------|----------|
+| `OpenAICompatibleLLM` | Any OpenAI `/chat/completions` endpoint (most providers) |
+| `AnthropicLLM` | Anthropic Messages API (`/v1/messages`) |
+| `OllamaLLM` | Native Ollama (`/api/chat`) |
+| `OpenRouterLLM` | Backward-compatible OpenRouter preset |
+| `MockLLM` | Deterministic offline mock for tests |
+
+```python
+from kssrag import create_llm, list_providers
+
+list_providers()                                    # dict of all presets
+llm = create_llm(provider="groq", model="llama-3.3-70b-versatile")
+answer = llm.predict([{"role": "user", "content": "Hello"}])
+for token in llm.predict_stream([{"role": "user", "content": "Hi"}]):
+    print(token, end="")
+```
+
+On total failure across the primary and fallback models, adapters raise `LLMError`.
+
+## Retrieval Evaluation
+
+```python
+from kssrag.eval import evaluate_retriever, compare_retrievers, format_comparison
+
+dataset = [("query text", {"relevant_doc_id_1", "relevant_doc_id_2"})]
+
+# Score one retriever (documents must expose metadata["id"])
+scores = evaluate_retriever(store, dataset, k=10, metrics=["recall", "mrr", "ndcg"])
+
+# Compare several
+results = compare_retrievers({"bm25": s1, "hybrid": s2}, dataset, k=10)
+print(format_comparison(results, k=10))
+```
+
+Metrics available: `precision_at_k`, `recall_at_k`, `hit_at_k`, `mrr_at_k`, `ndcg_at_k`.
+
+## Rank Fusion
+
+```python
+from kssrag.core.fusion import reciprocal_rank_fusion
+
+# Fuse ranked lists from multiple retrievers (used internally by hybrid stores)
+fused = reciprocal_rank_fusion([bm25_results, semantic_results], top_k=5)
+```
+
 ## Server API Endpoints
 
 ### Query Endpoint
@@ -604,17 +676,17 @@ class OCRLoader:
 async def query_endpoint(request: QueryRequest):
     """
     Handle user queries.
-    
+
     Request:
         {
             "query": "user question",
             "session_id": "optional session id"
         }
-    
+
     Response:
         {
             "query": "original query",
-            "response": "generated response", 
+            "response": "generated response",
             "session_id": "session identifier"
         }
     """
@@ -623,13 +695,23 @@ async def query_endpoint(request: QueryRequest):
 ### Stream Endpoint
 
 ```python
-@app.post("/stream") 
+@app.post("/stream")
 async def stream_query(request: QueryRequest):
     """
     Streaming query endpoint with Server-Sent Events.
-    
-    Returns streaming response with chunked data.
+
+    Emits `data: {"chunk": "...", "done": false}` lines, terminated by
+    `data: {"chunk": "", "done": true}`. Runs the blocking LLM call in a worker
+    thread so it never blocks the event loop.
     """
+```
+
+### Session Endpoints
+
+```python
+@app.post("/sessions/{session_id}/clear")   # clear a session's history
+@app.delete("/sessions/{session_id}")        # drop a session entirely
+@app.get("/sessions/{session_id}/clear")     # deprecated alias (kept for compat)
 ```
 
 ### Health Check
@@ -639,12 +721,12 @@ async def stream_query(request: QueryRequest):
 async def health_check():
     """
     Health check endpoint.
-    
+
     Response:
         {
             "status": "healthy",
             "message": "KSS RAG API is running",
-            "version": "0.2.0"
+            "version": "0.3.0"
         }
     """
 ```
@@ -654,38 +736,29 @@ async def health_check():
 ### Common Exceptions
 
 ```python
-class KSSRAGError(Exception):
-    """Base exception for KSS RAG framework."""
-    pass
+from kssrag import LLMError
 
-class ConfigurationError(KSSRAGError):
-    """Configuration-related errors."""
-    pass
-
-class DocumentProcessingError(KSSRAGError):
-    """Document loading and processing errors."""
-    pass
-
-class VectorStoreError(KSSRAGError):
-    """Vector store operation errors."""
-    pass
-
-class LLMError(KSSRAGError):
-    """LLM API and generation errors."""
-    pass
+class LLMError(RuntimeError):
+    """Raised when an LLM adapter cannot produce a response (all models failed)."""
 ```
+
+`LLMError` is the exception the framework raises today. `RAGAgent.query` /
+`query_stream` propagate it so callers can distinguish a real LLM failure from a
+normal empty-context response (rather than a fallback string silently entering
+the conversation).
 
 ### Error Recovery
 
 ```python
+from kssrag import LLMError
+
 try:
     rag.load_document("document.pdf")
     response = rag.query("question")
-except DocumentProcessingError as e:
+except FileNotFoundError as e:
     print(f"Document error: {e}")
-    # Implement fallback logic
 except LLMError as e:
-    print(f"LLM error: {e}") 
+    print(f"LLM error: {e}")
     # Implement retry or alternative response
 ```
 
