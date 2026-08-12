@@ -2,11 +2,13 @@ from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import StreamingResponse
 from pydantic import BaseModel
-from typing import Optional, List
+from typing import Optional, List, Dict, Any
 import asyncio
+import time
 import uuid
 import json
 from collections import OrderedDict
+from functools import partial
 
 import anyio
 
@@ -17,6 +19,14 @@ from .config import config
 class QueryRequest(BaseModel):
     query: str
     session_id: Optional[str] = None
+    metadata_filter: Optional[Dict[str, Any]] = None
+
+class ChatCompletionRequest(BaseModel):
+    """OpenAI-compatible chat completions request."""
+    model: Optional[str] = None
+    messages: List[Dict[str, Any]]
+    stream: bool = False
+    user: Optional[str] = None
 
 class ServerConfig(BaseModel):
     """Configuration for the FastAPI server"""
@@ -85,7 +95,14 @@ def create_app(rag_agent: RAGAgent, server_config: Optional[ServerConfig] = None
             agent = get_or_create_session(session_id)
             # agent.query() is synchronous and network-bound; run it in a worker
             # thread so it does not block the event loop (allowing concurrency).
-            response = await anyio.to_thread.run_sync(agent.query, query)
+            response = await anyio.to_thread.run_sync(
+                partial(
+                    agent.query,
+                    query,
+                    top_k=config.TOP_K,
+                    metadata_filter=request.metadata_filter,
+                )
+            )
 
             return {
                 "query": query,
@@ -121,7 +138,9 @@ def create_app(rag_agent: RAGAgent, server_config: Optional[ServerConfig] = None
 
                 def producer():
                     try:
-                        for token in agent.query_stream(query, top_k=5):
+                        for token in agent.query_stream(
+                            query, top_k=config.TOP_K, metadata_filter=request.metadata_filter
+                        ):
                             if token:
                                 loop.call_soon_threadsafe(queue.put_nowait, ("chunk", token))
                         loop.call_soon_threadsafe(queue.put_nowait, ("done", None))
@@ -157,6 +176,105 @@ def create_app(rag_agent: RAGAgent, server_config: Optional[ServerConfig] = None
         except Exception as e:
             logger.error(f"Streaming query failed: {str(e)}")
             raise HTTPException(status_code=500, detail=f"Streaming error: {str(e)}")
+
+    @app.post("/v1/chat/completions")
+    async def chat_completions(request: ChatCompletionRequest):
+        """OpenAI-compatible chat completions (plain and SSE streaming).
+
+        Lets any OpenAI SDK/client talk to the kssrag server. The last user
+        message is used as the retrieval query; conversation memory is keyed
+        by the optional ``user`` field (defaults to a shared session).
+        """
+        if not request.messages:
+            raise HTTPException(status_code=400, detail="messages is required")
+        user_messages = [m for m in request.messages if m.get("role") == "user"]
+        if not user_messages:
+            raise HTTPException(status_code=400, detail="No user message found in messages")
+        raw_content = user_messages[-1].get("content") or ""
+        # Guard against multimodal (list) content; kssrag is text-only.
+        query = raw_content if isinstance(raw_content, str) else str(raw_content)
+        query = query.strip()
+        if not query:
+            raise HTTPException(status_code=400, detail="Query cannot be empty")
+
+        session_id = request.user or "openai-default"
+        try:
+            agent = get_or_create_session(session_id)
+            model = request.model or "kssrag"
+
+            if not request.stream:
+                response = await anyio.to_thread.run_sync(
+                    partial(agent.query, query, top_k=config.TOP_K)
+                )
+                return {
+                    "id": f"chatcmpl-{uuid.uuid4().hex[:24]}",
+                    "object": "chat.completion",
+                    "created": int(time.time()),
+                    "model": model,
+                    "choices": [{
+                        "index": 0,
+                        "message": {"role": "assistant", "content": response},
+                        "finish_reason": "stop",
+                    }],
+                    # Rough character-based token estimates (no tokenizer here).
+                    "usage": {
+                        "prompt_tokens": len(query) // 4,
+                        "completion_tokens": len(response) // 4,
+                        "total_tokens": (len(query) + len(response)) // 4,
+                    },
+                }
+
+            async def generate():
+                queue: asyncio.Queue = asyncio.Queue()
+                loop = asyncio.get_running_loop()
+                completion_id = f"chatcmpl-{uuid.uuid4().hex[:24]}"
+                created = int(time.time())
+
+                def producer():
+                    try:
+                        for token in agent.query_stream(query, top_k=config.TOP_K):
+                            if token:
+                                loop.call_soon_threadsafe(queue.put_nowait, ("chunk", token))
+                        loop.call_soon_threadsafe(queue.put_nowait, ("done", None))
+                    except Exception:
+                        logger.error("OpenAI streaming failed", exc_info=True)
+                        loop.call_soon_threadsafe(queue.put_nowait, ("error", None))
+
+                producer_future = asyncio.ensure_future(anyio.to_thread.run_sync(producer))
+
+                def delta_payload(delta: dict, finish_reason=None) -> str:
+                    return "data: " + json.dumps({
+                        "id": completion_id,
+                        "object": "chat.completion.chunk",
+                        "created": created,
+                        "model": model,
+                        "choices": [{"index": 0, "delta": delta, "finish_reason": finish_reason}],
+                    }) + "\n\n"
+
+                try:
+                    yield delta_payload({"role": "assistant", "content": ""})
+                    while True:
+                        kind, payload = await queue.get()
+                        if kind == "chunk":
+                            yield delta_payload({"content": payload})
+                        else:  # done or error: terminate the stream cleanly
+                            yield delta_payload({}, finish_reason="stop")
+                            yield "data: [DONE]\n\n"
+                            break
+                finally:
+                    await producer_future
+
+            return StreamingResponse(
+                generate(),
+                media_type="text/event-stream",
+                headers={
+                    "Cache-Control": "no-cache",
+                    "Connection": "keep-alive",
+                },
+            )
+        except Exception:
+            logger.error("Error handling chat completion", exc_info=True)
+            raise HTTPException(status_code=500, detail="Internal server error")
 
     @app.get("/health")
     async def health_check():

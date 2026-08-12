@@ -4,7 +4,7 @@
 
 ![Python Version](https://img.shields.io/badge/python-3.10%2B-blue)
 ![License](https://img.shields.io/badge/license-MIT-green)
-![Version](https://img.shields.io/badge/version-0.3.0-brightgreen)
+![Version](https://img.shields.io/badge/version-0.4.0-brightgreen)
 ![Framework](https://img.shields.io/badge/framework-RAG-orange)
 
 **Stand up a streaming RAG API from a single document with one command.**
@@ -43,6 +43,7 @@ pip install kssrag
 # Optional extras
 pip install kssrag[ocr]      # PaddleOCR (handwritten) + Tesseract (typed)
 pip install kssrag[office]   # DOCX / Excel / PowerPoint loaders
+pip install kssrag[faiss]    # FAISS + sentence-transformers (semantic stores)
 pip install kssrag[gpu]      # GPU FAISS
 pip install kssrag[all]      # everything
 ```
@@ -210,6 +211,9 @@ rag.load_document("technical_docs.pdf")
 # Blocking query
 print(rag.query("What are the technical specifications?"))
 
+# Filter retrieved context by document metadata (AND semantics)
+print(rag.query("Specifications", metadata_filter={"source": "docs"}))
+
 # Streaming query
 for chunk in rag.agent.query_stream("Walk me through the architecture.", top_k=8):
     print(chunk, end="", flush=True)
@@ -247,8 +251,9 @@ uvicorn.run(app, host="0.0.0.0", port=8000)
 
 | Endpoint | Method | Description |
 |----------|--------|-------------|
-| `/query` | POST | Query the RAG system (`query`, `session_id`) |
+| `/query` | POST | Query the RAG system (`query`, `session_id`, optional `metadata_filter`) |
 | `/stream` | POST | Streaming query via Server-Sent Events |
+| `/v1/chat/completions` | POST | OpenAI-compatible chat completions (plain + SSE streaming) |
 | `/health` | GET | Health check |
 | `/config` | GET | Active server configuration |
 | `/sessions/{id}/clear` | GET | Clear a session's conversation history |
@@ -280,7 +285,7 @@ Document ──> Chunker ──> Vector Store ──> Retriever ──┐
 
 ### Chunkers
 
-`TextChunker` (character windows with overlap) is the base. `PDFChunker`, `ImageChunker` (OCR), and `OfficeChunker` extract text and delegate to it; `JSONChunker` flattens records keyed on a `name` field. Every chunk is a `{"content", "metadata"}` dict carried through the whole pipeline.
+`TextChunker` (character windows with overlap) is the base. `SentenceChunker` packs whole sentences into chunks so fixed windows never cut mid-thought — great for persona/memory documents (select via `CHUNKER_TYPE=sentence` or `--chunker sentence`). `PDFChunker`, `ImageChunker` (OCR), and `OfficeChunker` extract text and delegate to a text chunker; `JSONChunker` flattens records keyed on a `name` field. Every chunk is a `{"content", "metadata"}` dict carried through the whole pipeline.
 
 ### Conversation memory
 

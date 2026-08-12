@@ -3,7 +3,7 @@ import sys
 import os  # Add this import if not already present
 from typing import Optional
 from .utils.document_loaders import load_document, load_json_documents
-from .core.chunkers import ImageChunker, OfficeChunker, TextChunker, JSONChunker, PDFChunker
+from .core.chunkers import ImageChunker, OfficeChunker, TextChunker, SentenceChunker, JSONChunker, PDFChunker
 from .core.vectorstores import BM25SVectorStore, BM25VectorStore, FAISSVectorStore, TFIDFVectorStore, HybridVectorStore, HybridOfflineVectorStore
 from .core.retrievers import SimpleRetriever
 from .core.agents import RAGAgent
@@ -51,6 +51,9 @@ def main():
     query_parser.add_argument("--vector-store", type=str, default=config.VECTOR_STORE_TYPE,
                          choices=["bm25", "bm25s", "faiss", "tfidf", "hybrid_online", "hybrid_offline"],
                          help="Vector store type")
+    query_parser.add_argument("--chunker", type=str, default=config.CHUNKER_TYPE,
+                         choices=["text", "sentence"],
+                         help="Chunker for text documents (sentence = sentence-boundary aware)")
     query_parser.add_argument("--stream", action="store_true",
                          help="Enable streaming response")
     query_parser.add_argument("--top-k", type=int, default=config.TOP_K, help="Number of results to retrieve")
@@ -74,6 +77,9 @@ def main():
     server_parser.add_argument("--vector-store", type=str, default=config.VECTOR_STORE_TYPE,
                             choices=["bm25", "bm25s", "faiss", "tfidf", "hybrid_online", "hybrid_offline"],  # Add bm25s
                             help="Vector store type")
+    server_parser.add_argument("--chunker", type=str, default=config.CHUNKER_TYPE,
+                            choices=["text", "sentence"],
+                            help="Chunker for text documents (sentence = sentence-boundary aware)")
     server_parser.add_argument("--port", type=int, default=config.SERVER_PORT, help="Port to run server on")
     server_parser.add_argument("--host", type=str, default=config.SERVER_HOST, help="Host to run server on")
     server_parser.add_argument("--system-prompt", type=str, help="Path to a file containing the system prompt or the prompt text itself")
@@ -93,7 +99,10 @@ def main():
         # Load and process document
         if args.format == "text":
             content = load_document(args.file)
-            chunker = TextChunker(chunk_size=config.CHUNK_SIZE, overlap=config.CHUNK_OVERLAP)
+            if args.chunker == "sentence":
+                chunker = SentenceChunker(chunk_size=config.CHUNK_SIZE, overlap=config.CHUNK_OVERLAP)
+            else:
+                chunker = TextChunker(chunk_size=config.CHUNK_SIZE, overlap=config.CHUNK_OVERLAP)
             documents = chunker.chunk(content, {"source": args.file})
         elif args.format == "json":
             data = load_json_documents(args.file)
@@ -178,7 +187,10 @@ def main():
         # Load and process document
         if args.format == "text":
             content = load_document(args.file)
-            chunker = TextChunker(chunk_size=config.CHUNK_SIZE, overlap=config.CHUNK_OVERLAP)
+            if args.chunker == "sentence":
+                chunker = SentenceChunker(chunk_size=config.CHUNK_SIZE, overlap=config.CHUNK_OVERLAP)
+            else:
+                chunker = TextChunker(chunk_size=config.CHUNK_SIZE, overlap=config.CHUNK_OVERLAP)
             documents = chunker.chunk(content, {"source": args.file})
         elif args.format == "json":
             data = load_json_documents(args.file)

@@ -29,9 +29,23 @@ class BaseVectorStore:
         """Add documents to the vector store"""
         raise NotImplementedError("Subclasses must implement this method")
     
-    def retrieve(self, query: str, top_k: int = 5) -> List[Dict[str, Any]]:
-        """Retrieve documents based on query"""
+    def retrieve(self, query: str, top_k: int = 5,
+                 metadata_filter: Optional[Dict[str, Any]] = None) -> List[Dict[str, Any]]:
+        """Retrieve documents based on query.
+
+        ``metadata_filter`` restricts candidates to documents whose ``metadata``
+        matches every key/value pair (AND semantics).
+        """
         raise NotImplementedError("Subclasses must implement this method")
+    
+    @staticmethod
+    def _matches_metadata(doc: Dict[str, Any],
+                          metadata_filter: Optional[Dict[str, Any]]) -> bool:
+        """True if the doc's metadata satisfies all filter pairs (AND)."""
+        if not metadata_filter:
+            return True
+        metadata = doc.get("metadata", {})
+        return all(metadata.get(key) == value for key, value in metadata_filter.items())
     
     def persist(self):
         """Persist the vector store to disk"""
@@ -62,7 +76,8 @@ class BM25VectorStore(BaseVectorStore):
         """Tokenize text for BM25"""
         return re.findall(r'\w+', text.lower())
     
-    def retrieve(self, query: str, top_k: int = 5) -> List[Dict[str, Any]]:
+    def retrieve(self, query: str, top_k: int = 5,
+                 metadata_filter: Optional[Dict[str, Any]] = None) -> List[Dict[str, Any]]:
         if not self.bm25:
             raise ValueError("BM25 index not initialized. Call add_documents first.")
         
@@ -70,17 +85,20 @@ class BM25VectorStore(BaseVectorStore):
             tokenized_query = self._tokenize(query)
             doc_scores = self.bm25.get_scores(tokenized_query)
             
-            # Get top-k indices
-            top_indices = np.argsort(doc_scores)[::-1][:top_k]
+            # Rank only docs that match the metadata filter (if any), then
+            # take the top_k highest-scoring ones.
+            candidates = [
+                i for i in range(len(self.documents))
+                if self._matches_metadata(self.documents[i], metadata_filter)
+            ]
+            candidates.sort(key=lambda i: doc_scores[i], reverse=True)
+            top_indices = candidates[:top_k]
             
-            # Filter out invalid indices
-            valid_indices = [i for i in top_indices if i < len(self.documents)]
-            
-            if not valid_indices:
+            if not top_indices:
                 logger.warning(f"No valid indices found for query: {query}")
                 return []
                 
-            return [self.documents[i] for i in valid_indices]
+            return [self.documents[i] for i in top_indices]
             
         except Exception as e:
             logger.error(f"Error in BM25 retrieval: {str(e)}")
@@ -158,16 +176,29 @@ class FAISSVectorStore(BaseVectorStore):
         
         logger.info(f"FAISS index created with {len(self.documents)} documents")
     
-    def retrieve(self, query: str, top_k: int = 5) -> List[Dict[str, Any]]:
+    def retrieve(self, query: str, top_k: int = 5,
+                 metadata_filter: Optional[Dict[str, Any]] = None) -> List[Dict[str, Any]]:
         if not self.index or self.index.ntotal == 0:
             raise ValueError("FAISS index not initialized. Call add_documents first.")
         
         try:
             query_embedding = self.model.encode([query])
-            distances, indices = self.index.search(query_embedding.astype('float32'), top_k)
+            # Fetch a wider candidate pool only when filtering, so metadata-
+            # filtered docs still have a chance to fill top_k. Unfiltered
+            # queries search exactly top_k (no perf regression).
+            if metadata_filter:
+                search_k = min(max(top_k, top_k * 4), self.index.ntotal)
+            else:
+                search_k = min(top_k, self.index.ntotal)
+            distances, indices = self.index.search(query_embedding.astype('float32'), search_k)
             
-            # Filter out invalid indices (FAISS might return -1 for no results)
-            valid_indices = [i for i in indices[0] if i >= 0 and i < len(self.documents)]
+            # Filter out invalid indices (FAISS might return -1) and any docs
+            # that don't match the metadata filter, preserving distance order.
+            valid_indices = [
+                i for i in indices[0]
+                if 0 <= i < len(self.documents)
+                and self._matches_metadata(self.documents[i], metadata_filter)
+            ][:top_k]
             
             if not valid_indices:
                 logger.warning(f"No valid indices found for query: {query}")
@@ -222,7 +253,8 @@ class TFIDFVectorStore(BaseVectorStore):
         
         logger.info(f"TFIDF index created with {len(self.documents)} documents")
     
-    def retrieve(self, query: str, top_k: int = 5) -> List[Dict[str, Any]]:
+    def retrieve(self, query: str, top_k: int = 5,
+                 metadata_filter: Optional[Dict[str, Any]] = None) -> List[Dict[str, Any]]:
         if self.tfidf_matrix is None:
             raise ValueError("TFIDF index not initialized. Call add_documents first.")
         
@@ -233,17 +265,19 @@ class TFIDFVectorStore(BaseVectorStore):
             # Calculate cosine similarities
             similarities = cosine_similarity(query_vec, self.tfidf_matrix).flatten()
             
-            # Get top-k indices
-            top_indices = np.argsort(similarities)[::-1][:top_k]
+            # Rank only docs that match the metadata filter (if any).
+            candidates = [
+                i for i in range(len(self.documents))
+                if self._matches_metadata(self.documents[i], metadata_filter)
+            ]
+            candidates.sort(key=lambda i: similarities[i], reverse=True)
+            top_indices = candidates[:top_k]
             
-            # Filter out invalid indices
-            valid_indices = [i for i in top_indices if i < len(self.documents)]
-            
-            if not valid_indices:
+            if not top_indices:
                 logger.warning(f"No valid indices found for query: {query}")
                 return []
                 
-            return [self.documents[i] for i in valid_indices]
+            return [self.documents[i] for i in top_indices]
             
         except Exception as e:
             logger.error(f"Error in TFIDF retrieval: {str(e)}")
@@ -284,14 +318,15 @@ class HybridVectorStore(BaseVectorStore):
         self.faiss_store.add_documents(documents)
         logger.info(f"Hybrid index created with {len(self.documents)} documents")
     
-    def retrieve(self, query: str, top_k: int = 5) -> List[Dict[str, Any]]:
+    def retrieve(self, query: str, top_k: int = 5,
+                 metadata_filter: Optional[Dict[str, Any]] = None) -> List[Dict[str, Any]]:
         try:
             # Retrieve a wider candidate set from each method, then fuse their
             # rankings with RRF. Fusing by rank (not raw score) lets us combine
             # lexical BM25 and semantic FAISS results without normalizing their
             # incompatible score scales.
-            bm25_results = self.bm25_store.retrieve(query, top_k * 2)
-            faiss_results = self.faiss_store.retrieve(query, top_k * 2)
+            bm25_results = self.bm25_store.retrieve(query, top_k * 2, metadata_filter)
+            faiss_results = self.faiss_store.retrieve(query, top_k * 2, metadata_filter)
 
             fused = reciprocal_rank_fusion(
                 [bm25_results, faiss_results], top_k=top_k
@@ -328,13 +363,14 @@ class HybridOfflineVectorStore(BaseVectorStore):
         self.tfidf_store.add_documents(documents)
         logger.info(f"Hybrid offline index created with {len(self.documents)} documents")
     
-    def retrieve(self, query: str, top_k: int = 5) -> List[Dict[str, Any]]:
+    def retrieve(self, query: str, top_k: int = 5,
+                 metadata_filter: Optional[Dict[str, Any]] = None) -> List[Dict[str, Any]]:
         try:
             # Retrieve a wider candidate set from each method, then fuse with RRF,
             # weighting BM25 vs TF-IDF by alpha. RRF fuses by rank position, which
             # avoids the flawed position-normalization the previous approach used.
-            bm25_results = self.bm25_store.retrieve(query, top_k * 2)
-            tfidf_results = self.tfidf_store.retrieve(query, top_k * 2)
+            bm25_results = self.bm25_store.retrieve(query, top_k * 2, metadata_filter)
+            tfidf_results = self.tfidf_store.retrieve(query, top_k * 2, metadata_filter)
 
             fused = reciprocal_rank_fusion(
                 [bm25_results, tfidf_results],
@@ -391,26 +427,44 @@ class BM25SVectorStore(BaseVectorStore):
             logger.error(f"BM25S initialization failed: {str(e)}")
             raise
     
-    def retrieve(self, query: str, top_k: int = 5) -> List[Dict[str, Any]]:
+    def retrieve(self, query: str, top_k: int = 5,
+                 metadata_filter: Optional[Dict[str, Any]] = None) -> List[Dict[str, Any]]:
         if not self.bm25_retriever:
             raise ValueError("BM25S index not initialized. Call add_documents first.")
         
         try:
             import bm25s
+            if not self.documents:
+                return []
             # Tokenize query with BM25S
             query_tokens = bm25s.tokenize([query], stemmer=self.stemmer)
             
-            # Retrieve with BM25S
-            results, scores = self.bm25_retriever.retrieve(query_tokens, k=top_k)
+            # bm25s raises if k exceeds the corpus size, so cap it. Fetch a
+            # wider candidate pool when filtering so filtered docs can still
+            # fill top_k.
+            fetch_k = min(
+                top_k * 4 if metadata_filter else top_k,
+                len(self.documents),
+            )
+            results, scores = self.bm25_retriever.retrieve(query_tokens, k=fetch_k)
             
-            # Format results
+            # Format results (respecting the metadata filter). bm25s may pad
+            # results with -1 (or repeat docs) when k exceeds the corpus size,
+            # so guard indices and dedupe.
             retrieved_docs = []
+            seen = set()
             for i in range(results.shape[1]):
-                doc_idx = results[0, i]
-                score = scores[0, i]
-                
-                if doc_idx < len(self.documents):
-                    retrieved_docs.append(self.documents[doc_idx])
+                doc_idx = int(results[0, i])
+                if doc_idx < 0 or doc_idx >= len(self.documents):
+                    continue
+                if doc_idx in seen:
+                    continue
+                if not self._matches_metadata(self.documents[doc_idx], metadata_filter):
+                    continue
+                seen.add(doc_idx)
+                retrieved_docs.append(self.documents[doc_idx])
+                if len(retrieved_docs) == top_k:
+                    break
             
             logger.info(f"BM25S retrieved {len(retrieved_docs)} documents for query: {query}")
             return retrieved_docs

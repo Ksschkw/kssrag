@@ -198,7 +198,7 @@ llm = create_llm(provider="custom",
 |-----------|------|---------|-------|-------------|
 | `CHUNK_SIZE` | int | 500 | 100-2000 | Characters per chunk |
 | `CHUNK_OVERLAP` | int | 50 | 0-500 | Character overlap between chunks |
-| `CHUNKER_TYPE` | enum | `text` | text,json,pdf,image | Document chunking strategy |
+| `CHUNKER_TYPE` | enum | `text` | text,sentence,json,pdf,image | Document chunking strategy (`sentence` = sentence-boundary-aware) |
 
 **Chunking Best Practices:**
 

@@ -79,6 +79,18 @@ def test_faiss_top_k(faiss_store):
     assert len(faiss_store.retrieve("aaaa", top_k=99)) == 3
 
 
+def test_faiss_metadata_filter(faiss_store):
+    docs = [
+        {"content": "aaaa aaaa aaaa", "metadata": {"id": "a", "team": "x"}},
+        {"content": "bbbb bbbb bbbb", "metadata": {"id": "b", "team": "y"}},
+        {"content": "cccc cccc cccc", "metadata": {"id": "c", "team": "x"}},
+    ]
+    faiss_store.add_documents(docs)
+    res = faiss_store.retrieve("aaaa", top_k=5, metadata_filter={"team": "x"})
+    assert all(d["metadata"]["team"] == "x" for d in res)
+    assert len(res) == 2
+
+
 def test_faiss_persist_load(tmp_path, monkeypatch):
     path = str(tmp_path / "faiss.index")
     monkeypatch.setattr(

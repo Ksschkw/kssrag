@@ -5,6 +5,36 @@ All notable changes to this project are documented here.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased]
+
+### Added
+
+- **`SentenceChunker`** — sentence-boundary-aware chunking that packs whole
+  sentences into chunks (with sentence-level overlap) so fixed character
+  windows never cut mid-thought. Selectable via `CHUNKER_TYPE=sentence`,
+  `--chunker sentence`, or `load_document(chunker=SentenceChunker(...))`.
+- **Metadata filtering** — `metadata_filter` (dict, AND semantics) on vector
+  store / retriever / agent / `KSSRAG.query` / `/query` and `/stream` restricts
+  retrieved context to documents whose metadata matches.
+- **OpenAI-compatible `/v1/chat/completions`** endpoint — plain and SSE
+  streaming responses shaped like the OpenAI API, so any OpenAI SDK/client can
+  talk to the kssrag server.
+- **`LICENSE`** file ships with the package (MIT, matching setup.py/README).
+
+### Fixed
+
+- The server now honors `TOP_K` on `/query` and `/stream` (previously hardcoded
+  to 5, silently ignoring the config).
+- `BM25SVectorStore` no longer crashes when `top_k` exceeds the corpus size
+  (bm25s raises when `k > N`); the candidate count is capped and results are
+  deduplicated.
+
+### Changed
+
+- **Lighter base install.** `faiss-cpu` and `sentence-transformers` moved from
+  `install_requires` to the `kssrag[faiss]` extra (needed only for the `faiss`
+  and `hybrid_online` stores). Base `pip install kssrag` no longer pulls torch.
+
 ## [0.3.2] - 2026-08-12
 
 ### Fixed

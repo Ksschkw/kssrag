@@ -8,15 +8,21 @@ class BaseRetriever:
     def __init__(self, vector_store):
         self.vector_store = vector_store
     
-    def retrieve(self, query: str, top_k: int = 5) -> List[Dict[str, Any]]:
-        """Retrieve documents based on query"""
+    def retrieve(self, query: str, top_k: int = 5,
+                 metadata_filter: Optional[Dict[str, Any]] = None) -> List[Dict[str, Any]]:
+        """Retrieve documents based on query.
+
+        ``metadata_filter`` restricts candidates to docs whose metadata matches
+        every key/value pair.
+        """
         raise NotImplementedError("Subclasses must implement this method")
 
 class SimpleRetriever(BaseRetriever):
     """Simple retriever using only vector store"""
     
-    def retrieve(self, query: str, top_k: int = 5) -> List[Dict[str, Any]]:
-        return self.vector_store.retrieve(query, top_k)
+    def retrieve(self, query: str, top_k: int = 5,
+                 metadata_filter: Optional[Dict[str, Any]] = None) -> List[Dict[str, Any]]:
+        return self.vector_store.retrieve(query, top_k, metadata_filter)
 
 class HybridRetriever(BaseRetriever):
     """Hybrid retriever with fuzzy matching for specific entities"""
@@ -51,9 +57,10 @@ class HybridRetriever(BaseRetriever):
         
         return extracted_entities
     
-    def retrieve(self, query: str, top_k: int = 5) -> List[Dict[str, Any]]:
+    def retrieve(self, query: str, top_k: int = 5,
+                 metadata_filter: Optional[Dict[str, Any]] = None) -> List[Dict[str, Any]]:
         # First get results from vector store
-        results = self.vector_store.retrieve(query, top_k * 2)
+        results = self.vector_store.retrieve(query, top_k * 2, metadata_filter)
         
         # If we have entity names, boost documents that mention extracted entities
         if self.entity_names:

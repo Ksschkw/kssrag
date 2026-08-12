@@ -221,8 +221,13 @@ class RAGAgent:
             logger.info(f" Summary count trimmed to {len(self.conversation_summaries)}")
 
     
-    def query(self, question: str, top_k: int = 5, include_context: bool = True) -> str:
-        """Process a query with stealth conversation summarization"""
+    def query(self, question: str, top_k: int = 5, include_context: bool = True,
+              metadata_filter: Optional[Dict[str, Any]] = None) -> str:
+        """Process a query with stealth conversation summarization.
+
+        ``metadata_filter`` restricts retrieved context to documents whose
+        metadata matches every key/value pair.
+        """
         if self.llm is None:
             raise LLMError(
                 "No LLM configured. Set an API key (e.g. OPENROUTER_API_KEY) or "
@@ -231,7 +236,7 @@ class RAGAgent:
         try:
             # Retrieve relevant context
             logger.info(f" QUERY START: '{question}' (top_k: {top_k})")
-            context_docs = self.retriever.retrieve(question, top_k)
+            context_docs = self.retriever.retrieve(question, top_k, metadata_filter)
             logger.info(f" Retrieved {len(context_docs)} context documents")
             
             if not context_docs and include_context:
@@ -273,9 +278,11 @@ class RAGAgent:
             logger.error(f"Error processing query: {str(e)}")
             return "I encountered an issue processing your query. Please try again."
     
-    def query_stream(self, question: str, top_k: int = 5) -> Generator[str, None, None]:
+    def query_stream(self, question: str, top_k: int = 5,
+                     metadata_filter: Optional[Dict[str, Any]] = None) -> Generator[str, None, None]:
         """
-        Professional-grade streaming with multiple fallback strategies
+        Professional-grade streaming with multiple fallback strategies.
+        ``metadata_filter`` restricts retrieved context (see ``query``).
         """
         if self.llm is None:
             raise LLMError(
@@ -288,22 +295,23 @@ class RAGAgent:
             # Strategy 1: Try true streaming first
             if hasattr(self.llm, 'predict_stream'):
                 try:
-                    yield from self._stream_with_summary_protection(question, top_k)
+                    yield from self._stream_with_summary_protection(question, top_k, metadata_filter)
                     return
                 except Exception as stream_error:
                     logger.warning(f"Streaming failed, falling back: {stream_error}")
             
             # Strategy 2: Fallback to simulated streaming
             logger.info(" Falling back to simulated streaming")
-            yield from self._simulated_streaming(question, top_k)
+            yield from self._simulated_streaming(question, top_k, metadata_filter)
             
         except Exception as e:
             logger.error(f" ALL STREAMING STRATEGIES FAILED: {str(e)}")
             yield f"Error: {str(e)}"
 
-    def _stream_with_summary_protection(self, question: str, top_k: int) -> Generator[str, None, None]:
+    def _stream_with_summary_protection(self, question: str, top_k: int,
+                                        metadata_filter: Optional[Dict[str, Any]] = None) -> Generator[str, None, None]:
         """Token-only streaming. Never reconstruct or re-emit content."""
-        relevant_docs = self.retriever.retrieve(question, top_k=top_k)
+        relevant_docs = self.retriever.retrieve(question, top_k=top_k, metadata_filter=metadata_filter)
         context = self._build_context(relevant_docs)
         messages = self._build_messages(question, context)
 
@@ -365,9 +373,10 @@ class RAGAgent:
             else:
                 logger.info("Skipped adding duplicate assistant message in _process_complete_response.")
 
-    def _simulated_streaming(self, question: str, top_k: int) -> Generator[str, None, None]:
+    def _simulated_streaming(self, question: str, top_k: int,
+                             metadata_filter: Optional[Dict[str, Any]] = None) -> Generator[str, None, None]:
         """Simulated streaming that guarantees no summary leakage."""
-        relevant_docs = self.retriever.retrieve(question, top_k=top_k)
+        relevant_docs = self.retriever.retrieve(question, top_k=top_k, metadata_filter=metadata_filter)
         context = self._build_context(relevant_docs)
         messages = self._build_messages(question, context)
 

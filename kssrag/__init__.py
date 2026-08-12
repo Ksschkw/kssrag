@@ -2,7 +2,7 @@
 KSS RAG - A flexible Retrieval-Augmented Generation framework by Ksschkw
 """
 from .kssrag import KSSRAG
-from .core.chunkers import TextChunker, JSONChunker, PDFChunker
+from .core.chunkers import TextChunker, SentenceChunker, JSONChunker, PDFChunker
 from .core.vectorstores import BM25VectorStore, FAISSVectorStore, TFIDFVectorStore, HybridVectorStore, HybridOfflineVectorStore
 from .core.retrievers import SimpleRetriever, HybridRetriever
 from .core.agents import RAGAgent
@@ -31,6 +31,7 @@ __signature__ = "Built by Ksschkw (github.com/Ksschkw)"
 __all__ = [
     'KSSRAG',
     'TextChunker',
+    'SentenceChunker',
     'JSONChunker',
     'PDFChunker',
     'BM25VectorStore',

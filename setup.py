@@ -37,8 +37,6 @@ setup(
         "python-dotenv>=1.0.0",
         "requests>=2.31.0",
         "numpy>=1.26.0",
-        "faiss-cpu>=1.7.0",
-        "sentence-transformers>=3.0.0",
         "pydantic>=2.0.0",
         "pydantic-settings>=2.2.0",  # enable_decoding in SettingsConfigDict
         "rapidfuzz>=3.0.0",
@@ -57,6 +55,12 @@ setup(
     extras_require={
         "dev": ["pytest", "black", "flake8", "mypy"],
         "gpu": ["faiss-gpu>=1.7.0"],
+        # FAISS / semantic (hybrid_online, faiss) support: heavy, optional.
+        "faiss": [
+            "faiss-cpu>=1.7.0; sys_platform != 'win32'",
+            "faiss-cpu-win; sys_platform == 'win32'",
+            "sentence-transformers>=3.0.0",
+        ],
         "all": ["faiss-gpu>=1.7.0", "sentence-transformers[gpu]"],
 
         'ocr': [

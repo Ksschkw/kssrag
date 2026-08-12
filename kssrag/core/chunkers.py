@@ -52,6 +52,78 @@ class TextChunker(BaseChunker):
         logger.info(f"Created {len(chunks)} chunks from text")
         return chunks
 
+class SentenceChunker(BaseChunker):
+    """Chunker that respects sentence boundaries.
+
+    Fixed-size character windows cut sentences mid-thought, which degrades
+    retrieval for persona/memory-style documents. This chunker splits text into
+    sentences and packs whole sentences into chunks up to ``chunk_size``
+    characters. Overlap carries trailing sentences from the previous chunk
+    within the ``overlap`` character budget. A single sentence longer than
+    ``chunk_size`` is emitted as its own chunk.
+
+    Sentence splitting is a lightweight regex heuristic (no NLP dependencies):
+    punctuation followed by a capital letter, or newline/blank-line breaks.
+    """
+
+    _SENTENCE_RE = re.compile(r"(?<=[.!?])\s+(?=[A-Z0-9\"'(])|\n\s*\n\s*|\n+")
+
+    def _split_sentences(self, text: str) -> List[str]:
+        parts = [p.strip() for p in self._SENTENCE_RE.split(text)]
+        return [p for p in parts if p]
+
+    def chunk(self, content: str, metadata: Optional[Dict[str, Any]] = None) -> List[Dict[str, Any]]:
+        """Split text into sentence-aligned chunks with sentence-level overlap."""
+        if metadata is None:
+            metadata = {}
+
+        sentences = self._split_sentences(content)
+        if not sentences:
+            return []
+
+        chunks: List[Dict[str, Any]] = []
+        current: List[str] = []
+        current_len = 0
+
+        def _emit():
+            """Flush current buffer as a chunk, then carry overlap sentences."""
+            nonlocal current, current_len
+            if not current:
+                return
+            chunk_meta = metadata.copy()
+            chunk_meta["chunk_id"] = len(chunks)
+            chunks.append({"content": " ".join(current), "metadata": chunk_meta})
+            # Carry trailing sentences within the overlap budget so the next
+            # chunk starts with context instead of a cold sentence.
+            carry: List[str] = []
+            carry_len = 0
+            for sentence in reversed(current):
+                if carry and carry_len + len(sentence) > self.overlap:
+                    break
+                carry.insert(0, sentence)
+                carry_len += len(sentence)
+            current = carry
+            current_len = carry_len
+
+        for sentence in sentences:
+            s_len = len(sentence)
+            if s_len > self.chunk_size:
+                # Oversized sentence: flush buffer, emit it on its own.
+                _emit()
+                chunk_meta = metadata.copy()
+                chunk_meta["chunk_id"] = len(chunks)
+                chunks.append({"content": sentence, "metadata": chunk_meta})
+                continue
+            if current and current_len + s_len > self.chunk_size:
+                _emit()
+            current.append(sentence)
+            current_len += s_len
+
+        _emit()
+
+        logger.info(f"Created {len(chunks)} sentence-aware chunks")
+        return chunks
+
 class JSONChunker(BaseChunker):
     """Chunker for JSON documents"""
     

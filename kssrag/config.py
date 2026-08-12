@@ -31,6 +31,7 @@ class VectorStoreType(str, Enum):
 
 class ChunkerType(str, Enum):
     TEXT = "text"
+    SENTENCE = "sentence"
     JSON = "json"
     PDF = "pdf"
     IMAGE = "image"

@@ -2,13 +2,13 @@
 Main KSSRAG class that ties everything together for easy usage.
 """
 from typing import Optional, Dict, Any
-from .core.chunkers import TextChunker, JSONChunker, PDFChunker
+from .core.chunkers import TextChunker, SentenceChunker, JSONChunker, PDFChunker
 from .core.vectorstores import BM25VectorStore, BM25SVectorStore, FAISSVectorStore, TFIDFVectorStore, HybridVectorStore, HybridOfflineVectorStore
 from .core.retrievers import SimpleRetriever, HybridRetriever
 from .core.agents import RAGAgent
 from .models.factory import create_llm
 from .utils.document_loaders import load_document, load_json_documents
-from .config import Config, VectorStoreType, RetrieverType
+from .config import Config, VectorStoreType, ChunkerType, RetrieverType
 from .utils.helpers import logger, validate_config, import_custom_component
 
 class KSSRAG:
@@ -41,7 +41,16 @@ class KSSRAG:
         # Use custom chunker if provided
         if chunker is None:
             if format == 'text':
-                chunker = TextChunker(chunk_size=self.config.CHUNK_SIZE, overlap=self.config.CHUNK_OVERLAP)
+                if self.config.CHUNKER_TYPE == ChunkerType.SENTENCE:
+                    chunker = SentenceChunker(
+                        chunk_size=self.config.CHUNK_SIZE,
+                        overlap=self.config.CHUNK_OVERLAP,
+                    )
+                else:
+                    chunker = TextChunker(
+                        chunk_size=self.config.CHUNK_SIZE,
+                        overlap=self.config.CHUNK_OVERLAP,
+                    )
             elif format == 'json':
                 chunker = JSONChunker()
             elif format == 'pdf':
@@ -137,12 +146,21 @@ class KSSRAG:
         # Create agent
         self.agent = RAGAgent(self.retriever, llm)
     
-    def query(self, question: str, top_k: Optional[int] = None) -> str:
-        """Query the RAG system"""
+    def query(self, question: str, top_k: Optional[int] = None,
+              metadata_filter: Optional[Dict[str, Any]] = None) -> str:
+        """Query the RAG system.
+
+        ``metadata_filter`` restricts retrieved context to documents whose
+        metadata matches every key/value pair.
+        """
         if not self.agent:
             raise ValueError("No documents loaded. Call load_document first.")
         
-        return self.agent.query(question, top_k=top_k or self.config.TOP_K)
+        return self.agent.query(
+            question,
+            top_k=top_k or self.config.TOP_K,
+            metadata_filter=metadata_filter,
+        )
     
     def create_server(self, server_config=None):
         """Create a FastAPI server for the RAG system"""
