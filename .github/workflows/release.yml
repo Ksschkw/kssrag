@@ -1,0 +1,71 @@
+name: release
+
+# Cut a release by pushing a `vX.Y.Z` tag:
+#   git tag v0.3.2 && git push origin v0.3.2
+# The workflow gates on tests, builds the sdist + wheel, publishes to PyPI
+# (secret: PYPI_API_TOKEN), and attaches both artifacts to a GitHub release.
+on:
+  push:
+    tags:
+      - 'v*'
+
+permissions:
+  contents: write
+
+jobs:
+  test:
+    name: Test (gate)
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Install package and test dependencies
+        run: pip install -e . pytest
+      - name: Run test suite
+        run: python -m pytest tests/ -q
+
+  publish:
+    name: Build and publish
+    needs: test
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Install build tooling
+        run: pip install --upgrade build twine
+      - name: Verify tag matches package version
+        run: |
+          set -euo pipefail
+          tag="${GITHUB_REF_NAME#v}"
+          version="$(grep -E '^__version__' kssrag/__init__.py | head -1 | sed -E 's/.*"([^"]+)".*/\1/')"
+          if [ "$tag" != "$version" ]; then
+            echo "::error::Git tag '${GITHUB_REF_NAME}' does not match package version '$version'. Bump kssrag/__init__.py (and setup.py, server.py) before tagging."
+            exit 1
+          fi
+          setup_version="$(grep -E '^[[:space:]]*version=' setup.py | head -1 | sed -E 's/.*"([^"]+)".*/\1/')"
+          if [ "$setup_version" != "$version" ]; then
+            echo "::error::setup.py version '$setup_version' does not match __init__.py version '$version'."
+            exit 1
+          fi
+          echo "Tag '$tag' matches package version '$version' (setup.py agrees)."
+      - name: Build sdist and wheel
+        run: python -m build
+      - name: Validate artifacts (twine check)
+        run: python -m twine check dist/*
+      - name: Publish to PyPI
+        uses: pypa/gh-action-pypi-publish@release/v1
+        with:
+          password: ${{ secrets.PYPI_API_TOKEN }}
+      - name: Create GitHub Release with artifacts
+        uses: softprops/action-gh-release@v2
+        with:
+          files: dist/*
+          generate_release_notes: true
