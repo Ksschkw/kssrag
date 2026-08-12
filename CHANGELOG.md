@@ -5,7 +5,11 @@ All notable changes to this project are documented here.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [Unreleased]
+## [0.4.0] - 2026-08-12
+
+Feature release: sentence-aware chunking, metadata filtering, an
+OpenAI-compatible endpoint, and a lighter base install. Backward compatible
+with 0.3.x public APIs.
 
 ### Added
 
@@ -18,7 +22,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   retrieved context to documents whose metadata matches.
 - **OpenAI-compatible `/v1/chat/completions`** endpoint — plain and SSE
   streaming responses shaped like the OpenAI API, so any OpenAI SDK/client can
-  talk to the kssrag server.
+  talk to the kssrag server. Verified end-to-end against the official `openai`
+  Python SDK (hermetic tests in `tests/test_openai_sdk.py`).
 - **`LICENSE`** file ships with the package (MIT, matching setup.py/README).
 
 ### Fixed
@@ -28,12 +33,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - `BM25SVectorStore` no longer crashes when `top_k` exceeds the corpus size
   (bm25s raises when `k > N`); the candidate count is capped and results are
   deduplicated.
+- `/v1/chat/completions` now echoes `config.DEFAULT_MODEL` when the client
+  omits `model` (previously the literal string `"kssrag"`).
+- `setup.py` had a duplicate `faiss` extra key that silently dropped
+  `sentence-transformers` from `kssrag[faiss]`; the stale entry is removed.
 
 ### Changed
 
 - **Lighter base install.** `faiss-cpu` and `sentence-transformers` moved from
   `install_requires` to the `kssrag[faiss]` extra (needed only for the `faiss`
   and `hybrid_online` stores). Base `pip install kssrag` no longer pulls torch.
+- The release workflow's test gate installs `.[dev]` so the OpenAI SDK
+  compatibility tests actually run in CI.
 
 ## [0.3.2] - 2026-08-12
 
@@ -150,6 +161,7 @@ Baseline prior to the 0.3.0 work. OpenRouter-only LLM access; BM25/BM25S/FAISS/
 TFIDF/hybrid vector stores; FastAPI server with SSE streaming; CLI; OCR and
 Office document support.
 
+[0.4.0]: https://github.com/Ksschkw/kssrag/releases/tag/v0.4.0
 [0.3.2]: https://github.com/Ksschkw/kssrag/releases/tag/v0.3.2
 [0.3.1]: https://github.com/Ksschkw/kssrag/releases/tag/v0.3.1
 [0.3.0]: https://github.com/Ksschkw/kssrag/releases/tag/v0.3.0
