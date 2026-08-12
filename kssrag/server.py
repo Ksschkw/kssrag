@@ -200,7 +200,7 @@ def create_app(rag_agent: RAGAgent, server_config: Optional[ServerConfig] = None
         session_id = request.user or "openai-default"
         try:
             agent = get_or_create_session(session_id)
-            model = request.model or "kssrag"
+            model = request.model or config.DEFAULT_MODEL
 
             if not request.stream:
                 response = await anyio.to_thread.run_sync(

@@ -53,7 +53,7 @@ setup(
     ],
 
     extras_require={
-        "dev": ["pytest", "black", "flake8", "mypy"],
+        "dev": ["pytest", "black", "flake8", "mypy", "openai>=1.0.0"],
         "gpu": ["faiss-gpu>=1.7.0"],
         # FAISS / semantic (hybrid_online, faiss) support: heavy, optional.
         "faiss": [
@@ -75,10 +75,6 @@ setup(
         'openpyxl>=3.1.0',
         'python-pptx>=0.6.23',
         ],
-        'faiss': [
-            'faiss-cpu>=1.7.0; sys_platform != "win32"',
-            'faiss-cpu-win; sys_platform == "win32"'
-        ]
     },
     entry_points={
         "console_scripts": [

@@ -203,6 +203,8 @@ def test_chat_completions_stream_openai_events():
     assert events[-1] == "[DONE]"
     parsed = [json.loads(e) for e in events[:-1]]
     assert parsed[0]["object"] == "chat.completion.chunk"
+    # When the client omits `model`, the configured DEFAULT_MODEL is echoed.
+    assert parsed[0]["model"] == global_config.DEFAULT_MODEL
     assert parsed[0]["choices"][0]["delta"]["role"] == "assistant"
     content = "".join(
         p["choices"][0]["delta"].get("content", "") for p in parsed
