@@ -13,7 +13,13 @@ import pytest
 
 pytest.importorskip("openai")
 
-import httpx
+# openai SDK v3 vendors ``httpx2`` (and types its http_client as
+# httpx2.AsyncClient); v1/v2 use ``httpx``. Prefer httpx2 when present so the
+# injected client matches the SDK's own HTTP library.
+try:
+    import httpx2 as httpx
+except ImportError:
+    import httpx
 from openai import AsyncOpenAI
 
 from kssrag.core.agents import RAGAgent
