@@ -2,8 +2,8 @@ import os
 import platform
 from dotenv import load_dotenv
 from typing import List, Optional, Dict, Any
-from pydantic import Field, validator
-from pydantic_settings import BaseSettings
+from pydantic import Field, field_validator
+from pydantic_settings import BaseSettings, SettingsConfigDict
 from enum import Enum
 
 load_dotenv()
@@ -72,7 +72,16 @@ class Config(BaseSettings):
     
     FALLBACK_MODELS: List[str] = Field(
         default=os.getenv("FALLBACK_MODELS", "deepseek/deepseek-r1-0528:free,deepseek/deepseek-chat,deepseek/deepseek-r1:free").split(","),
-        description="List of fallback models to try if the default model fails"
+        description="List of fallback models to try if the default model fails (same provider)"
+    )
+
+    FALLBACK_PROVIDERS: List[str] = Field(
+        default=os.getenv("FALLBACK_PROVIDERS", ""),
+        description=(
+            "Comma-separated provider presets tried in order if the primary provider fails "
+            "(cross-provider fallback, e.g. 'openrouter,anthropic'). Each fallback uses the "
+            "global DEFAULT_MODEL unless overridden programmatically via create_llm()."
+        )
     )
 
     LLM_TEMPERATURE: float = Field(
@@ -98,6 +107,20 @@ class Config(BaseSettings):
         default=int(os.getenv("LLM_STREAM_TIMEOUT", 60)),
         ge=1,
         description="Per-request timeout (seconds) for streaming LLM calls"
+    )
+
+    LLM_MAX_RETRIES: int = Field(
+        default=int(os.getenv("LLM_MAX_RETRIES", 3)),
+        ge=0,
+        le=10,
+        description="Times to retry the same model on a 429 rate-limit response before trying the next model"
+    )
+
+    LLM_RETRY_BACKOFF: float = Field(
+        default=float(os.getenv("LLM_RETRY_BACKOFF", 2.0)),
+        ge=0.0,
+        le=60.0,
+        description="Base backoff (seconds) between 429 retries; doubles per attempt unless Retry-After is sent"
     )
 
     # Chunking settings
@@ -240,10 +263,15 @@ class Config(BaseSettings):
         description="Import path to a custom LLM class"
     )
     
-    class Config:
-        env_file = ".env"
-        case_sensitive = False
-        use_enum_values = True
+    model_config = SettingsConfigDict(
+        env_file=".env",
+        case_sensitive=False,
+        use_enum_values=True,
+        # Read env values as raw strings instead of JSON-decoding complex fields.
+        # Keeps comma-separated lists (FALLBACK_MODELS, CORS_*, FALLBACK_PROVIDERS)
+        # working; they are split by the field_validator below.
+        enable_decoding=False,
+    )
 
     # OCR settings
     OCR_DEFAULT_MODE: str = Field(
@@ -257,10 +285,15 @@ class Config(BaseSettings):
         description="Whether to enable streaming responses"
     )
         
-    @validator('FALLBACK_MODELS', 'CORS_ORIGINS', 'CORS_ALLOW_METHODS', 'CORS_ALLOW_HEADERS', pre=True)
+    @field_validator(
+        'FALLBACK_MODELS', 'FALLBACK_PROVIDERS',
+        'CORS_ORIGINS', 'CORS_ALLOW_METHODS', 'CORS_ALLOW_HEADERS',
+        mode='before',
+    )
+    @classmethod
     def split_string(cls, v):
         if isinstance(v, str):
-            return [item.strip() for item in v.split(',')]
+            return [item.strip() for item in v.split(',') if item.strip()]
         return v
 
 config = Config()

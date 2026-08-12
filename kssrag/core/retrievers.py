@@ -1,5 +1,6 @@
 from typing import List, Dict, Any, Optional
 from ..utils.helpers import logger
+from ..config import config
 
 class BaseRetriever:
     """Base class for retrievers"""
@@ -20,9 +21,14 @@ class SimpleRetriever(BaseRetriever):
 class HybridRetriever(BaseRetriever):
     """Hybrid retriever with fuzzy matching for specific entities"""
     
-    def __init__(self, vector_store, entity_names: Optional[List[str]] = None):
+    def __init__(self, vector_store, entity_names: Optional[List[str]] = None,
+                 fuzzy_threshold: Optional[int] = None):
         super().__init__(vector_store)
         self.entity_names = entity_names or []
+        self.fuzzy_threshold = (
+            fuzzy_threshold if fuzzy_threshold is not None
+            else config.FUZZY_MATCH_THRESHOLD
+        )
     
     def extract_entities(self, query: str) -> List[str]:
         """Extract entities from query using fuzzy matching"""
@@ -39,7 +45,9 @@ class HybridRetriever(BaseRetriever):
         # Use fuzzy matching for partial matches
         if not extracted_entities and self.entity_names:
             matches = process.extract(query, self.entity_names, scorer=fuzz.partial_ratio, limit=5)
-            extracted_entities = [match[0] for match in matches if match[1] > 80]
+            extracted_entities = [
+                match[0] for match in matches if match[1] > self.fuzzy_threshold
+            ]
         
         return extracted_entities
     

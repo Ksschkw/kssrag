@@ -4,7 +4,6 @@ import os
 from typing import List, Dict, Any, Optional
 import pypdf
 from ..utils.helpers import logger
-import os
 try:
     from ..utils.ocr_loader import OCRLoader
     OCR_AVAILABLE = True

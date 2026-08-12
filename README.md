@@ -2,7 +2,7 @@
 
 <div align="center">
 
-![Python Version](https://img.shields.io/badge/python-3.8%2B-blue)
+![Python Version](https://img.shields.io/badge/python-3.10%2B-blue)
 ![License](https://img.shields.io/badge/license-MIT-green)
 ![Version](https://img.shields.io/badge/version-0.3.0-brightgreen)
 ![Framework](https://img.shields.io/badge/framework-RAG-orange)
@@ -156,6 +156,42 @@ llm = create_llm(provider="groq", model="llama-3.3-70b-versatile")
 
 All providers share one interface (`predict` / `predict_stream`), so streaming, fallback models, and conversation memory work identically regardless of provider.
 
+### Cross-provider fallback
+
+`FALLBACK_MODELS` only covers other models on the **same** provider. For real
+resilience across providers, set `FALLBACK_PROVIDERS` (comma-separated preset
+names) to try other providers in order when the primary fails — each fallback
+uses its own API key:
+
+```bash
+PROVIDER=groq
+GROQ_API_KEY=your_groq_key
+FALLBACK_PROVIDERS=openrouter
+```
+
+> Env-driven fallbacks use `DEFAULT_MODEL` for every provider, so only list
+> providers where that model id is valid (OpenRouter-style ids like
+> `deepseek/deepseek-chat` work on OpenRouter, but not on Anthropic). Use the
+> programmatic form to give each fallback its own model:
+
+or programmatically:
+
+```python
+llm = create_llm(
+    provider="groq", model="openai/gpt-oss-20b",
+    fallback_providers=[
+        ("openrouter", {"model": "deepseek/deepseek-chat"}),
+        {"provider": "anthropic", "model": "claude-sonnet-4-6"},
+    ],
+)
+```
+
+Each entry is a provider name, a `(name, kwargs)` tuple, or a dict that includes
+`provider`. A fallback provider that isn't configured (e.g. no key) is skipped
+with a warning instead of breaking the chain. Rate-limit (HTTP 429) responses
+are retried on the same model before moving on, honoring the server's
+`Retry-After` / rate-limit-reset headers (`LLM_MAX_RETRIES`, `LLM_RETRY_BACKOFF`).
+
 ## Python API
 
 ```python
@@ -262,6 +298,9 @@ Everything is configurable through environment variables (`.env`) or the `Config
 OPENROUTER_API_KEY=your_key
 DEFAULT_MODEL=deepseek/deepseek-chat-v3.1:free
 FALLBACK_MODELS=deepseek/deepseek-r1:free,deepseek/deepseek-chat
+FALLBACK_PROVIDERS=openrouter,anthropic   # optional cross-provider chain
+LLM_MAX_RETRIES=3                          # 429 rate-limit retries
+LLM_RETRY_BACKOFF=2.0                      # base backoff seconds (doubles per attempt)
 
 CHUNK_SIZE=500
 CHUNK_OVERLAP=50

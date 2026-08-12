@@ -5,6 +5,49 @@ All notable changes to this project are documented here.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.3.1] - 2026-08-12
+
+Reliability release: cross-provider LLM fallback, rate-limit retries, and a
+round of hygiene fixes. Backward compatible with 0.3.0.
+
+### Added
+
+- **Cross-provider LLM fallback.** `create_llm(fallback_providers=[...])` wraps
+  the primary adapter in a `FallbackChainLLM` that tries other providers in
+  order (Groq → OpenRouter → Anthropic, ...) when the primary fails — each with
+  its own endpoint and API key. Configurable via the `FALLBACK_PROVIDERS` env
+  var (comma-separated preset names). Unconfigured fallbacks are skipped with a
+  warning. Programmatic entries accept a provider name, a `(name, kwargs)`
+  tuple, or a dict with a `provider` key (plus model/base_url/api_key
+  overrides). Streaming falls back too, but never switches providers
+  mid-stream after tokens have been emitted.
+- **429 rate-limit retries.** All LLM adapters retry the same model on HTTP 429,
+  honoring `Retry-After` / rate-limit-reset headers with exponential backoff
+  (`LLM_MAX_RETRIES`, `LLM_RETRY_BACKOFF`) before moving to the next fallback.
+
+### Fixed
+
+- **Comma-separated env vars no longer crash `Config()`.** pydantic-settings
+  v2 JSON-decodes complex env fields before validators run, so setting
+  `FALLBACK_MODELS`, `CORS_*`, or the new `FALLBACK_PROVIDERS` raised
+  `SettingsError`. Env values are now read as raw strings and split by the
+  field validator.
+- `FUZZY_MATCH_THRESHOLD` is now honored by `HybridRetriever` (previously a
+  hardcoded 80).
+- Server no longer leaks internal exception text in 500 responses (`/query` and
+  `/stream`); real errors are logged server-side.
+- Migrated to pydantic v2 APIs (`field_validator`, `SettingsConfigDict`,
+  `model_dump`) — the deprecation warnings are gone and pydantic v3 is no
+  longer a breaking risk.
+
+### Changed
+
+- **Python floor raised to 3.10** — code uses PEP 604 unions (`str | List[str]`)
+  which never worked on 3.8/3.9 despite the old `>=3.8` claim.
+- Removed dead code: unused imports, commented-out superseded implementations,
+  the unused `StreamResponse` model, and the unused `_extract_clean_content`
+  helper.
+
 ## [0.3.0] - 2026-07-20
 
 A large reliability, flexibility, and quality release. Backward compatible with

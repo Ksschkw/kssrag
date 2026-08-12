@@ -6,7 +6,7 @@ long_description = (here / "README.md").read_text(encoding="utf-8")
 
 setup(
     name="kssrag",
-    version="0.3.0",
+    version="0.3.1",
     description="A flexible Retrieval-Augmented Generation framework by Ksschkw",
     long_description=long_description,
     long_description_content_type="text/markdown",
@@ -19,8 +19,6 @@ setup(
         "Topic :: Scientific/Engineering :: Artificial Intelligence",
         "License :: OSI Approved :: MIT License",
         "Programming Language :: Python :: 3",
-        "Programming Language :: Python :: 3.8",
-        "Programming Language :: Python :: 3.9",
         "Programming Language :: Python :: 3.10",
         "Programming Language :: Python :: 3.11",
         "Programming Language :: Python :: 3.12",
@@ -29,7 +27,9 @@ setup(
     keywords="rag, retrieval, generation, ai, nlp, faiss, bm25",
     package_dir={"": "."},
     packages=find_packages(where="."),
-    python_requires=">=3.8, <4",
+    # NOTE: code uses PEP 604 unions (`str | List[str]`) and builtin generics,
+    # which require Python 3.10+.
+    python_requires=">=3.10, <4",
     install_requires=[
         "fastapi>=0.104.0",
         "uvicorn>=0.24.0",
@@ -40,7 +40,7 @@ setup(
         "faiss-cpu>=1.7.0",
         "sentence-transformers>=3.0.0",
         "pydantic>=2.0.0",
-        "pydantic-settings>=2.0.0",
+        "pydantic-settings>=2.2.0",  # enable_decoding in SettingsConfigDict
         "rapidfuzz>=3.0.0",
         "python-multipart>=0.0.6",
         "pypdf>=3.0.0",

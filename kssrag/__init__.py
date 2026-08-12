@@ -13,13 +13,14 @@ from .models.anthropic import AnthropicLLM
 from .models.factory import create_llm
 from .models.providers import list_providers
 from .models.base import BaseLLM, LLMError
+from .models.fallback import FallbackChainLLM
 from .utils.document_loaders import load_document, load_json_documents
 from .utils.helpers import logger, validate_config
 from .config import Config, VectorStoreType, ChunkerType, RetrieverType
 from .server import create_app, ServerConfig
 from .cli import main
 
-__version__ = "0.3.0"
+__version__ = "0.3.1"
 __author__ = "Ksschkw"
 __license__ = "MIT"
 
@@ -47,6 +48,7 @@ __all__ = [
     'BaseLLM',
     'LLMError',
     'create_llm',
+    'FallbackChainLLM',
     'list_providers',
     'load_document',
     'load_json_documents',

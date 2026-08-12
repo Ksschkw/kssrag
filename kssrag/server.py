@@ -2,15 +2,13 @@ from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import StreamingResponse
 from pydantic import BaseModel
-from typing import Dict, Any, Optional, List
+from typing import Optional, List
 import asyncio
 import uuid
 import json
 from collections import OrderedDict
 
 import anyio
-
-from kssrag.models.openrouter import OpenRouterLLM
 
 from .core.agents import RAGAgent
 from .utils.helpers import logger
@@ -19,10 +17,6 @@ from .config import config
 class QueryRequest(BaseModel):
     query: str
     session_id: Optional[str] = None
-
-class StreamResponse(BaseModel):
-    chunk: str
-    done: bool = False
 
 class ServerConfig(BaseModel):
     """Configuration for the FastAPI server"""
@@ -34,7 +28,7 @@ class ServerConfig(BaseModel):
     cors_allow_headers: List[str] = config.CORS_ALLOW_HEADERS
     title: str = "KSSSwagger"
     description: str = "[kssrag](https://github.com/Ksschkw/kssrag)"
-    version: str = "0.3.0"
+    version: str = "0.3.1"
 
 def create_app(rag_agent: RAGAgent, server_config: Optional[ServerConfig] = None):
     """Create a FastAPI app for the RAG agent with configurable CORS"""
@@ -99,9 +93,10 @@ def create_app(rag_agent: RAGAgent, server_config: Optional[ServerConfig] = None
                 "session_id": session_id
             }
 
-        except Exception as e:
-            logger.error(f"Error handling query: {str(e)}")
-            raise HTTPException(status_code=500, detail=f"Error: {str(e)}")
+        except Exception:
+            # Log the real failure server-side, but never leak internals to the client.
+            logger.error("Error handling query", exc_info=True)
+            raise HTTPException(status_code=500, detail="Internal server error")
 
     @app.post("/stream")
     async def stream_query(request: QueryRequest):
@@ -130,8 +125,9 @@ def create_app(rag_agent: RAGAgent, server_config: Optional[ServerConfig] = None
                             if token:
                                 loop.call_soon_threadsafe(queue.put_nowait, ("chunk", token))
                         loop.call_soon_threadsafe(queue.put_nowait, ("done", None))
-                    except Exception as exc:  # noqa: BLE001 - surfaced to client
-                        loop.call_soon_threadsafe(queue.put_nowait, ("error", str(exc)))
+                    except Exception as exc:  # noqa: BLE001 - logged, generic error sent to client
+                        logger.error(f"Streaming error: {exc}", exc_info=True)
+                        loop.call_soon_threadsafe(queue.put_nowait, ("error", None))
 
                 producer_task = anyio.to_thread.run_sync(producer)
                 producer_future = asyncio.ensure_future(producer_task)
@@ -143,9 +139,8 @@ def create_app(rag_agent: RAGAgent, server_config: Optional[ServerConfig] = None
                         elif kind == "done":
                             yield f"data: {json.dumps({'chunk': '', 'done': True})}\n\n"
                             break
-                        else:  # error
-                            logger.error(f"Streaming error: {payload}")
-                            yield f"data: {json.dumps({'error': payload, 'done': True})}\n\n"
+                        else:  # error (payload is None; real error already logged in producer)
+                            yield f"data: {json.dumps({'error': 'stream failed', 'done': True})}\n\n"
                             break
                 finally:
                     await producer_future
@@ -175,7 +170,7 @@ def create_app(rag_agent: RAGAgent, server_config: Optional[ServerConfig] = None
     @app.get("/config")
     async def get_config():
         """Get current server configuration"""
-        return server_config.dict()
+        return server_config.model_dump()
     
     def _clear_session(session_id: str):
         """Clear a session's conversation history (shared by POST and legacy GET)."""

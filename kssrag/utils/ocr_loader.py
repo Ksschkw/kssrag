@@ -13,38 +13,6 @@ class OCRLoader:
         self.paddle_ocr = None
         self._initialize_paddle_ocr()
     
-    # def _initialize_paddle_ocr(self):
-    #     """Initialize PaddleOCR with custom model directories and fallback"""
-    #     try:
-    #         # Try to use custom model directories first
-    #         det_model_dir = str(Path(__file__).parent.parent / 'paddle_models' / 'models' / 'ppocrv5_server_det')
-    #         rec_model_dir = str(Path(__file__).parent.parent / 'paddle_models' / 'models' / 'ppocrv5_server_rec')
-            
-    #         # Create directories if they don't exist
-    #         os.makedirs(det_model_dir, exist_ok=True)
-    #         os.makedirs(rec_model_dir, exist_ok=True)
-            
-    #         # Try to initialize with custom directories
-    #         try:
-    #             self.paddle_ocr = PaddleOCR(
-    #                 det_model_dir=det_model_dir,
-    #                 rec_model_dir=rec_model_dir,
-    #                 use_angle_cls=True,
-    #                 lang="en"
-    #             )
-    #             logger.info("PaddleOCR initialized successfully with custom model directories")
-                
-    #         except (PermissionError, OSError) as e:
-    #             logger.warning(f"Failed to initialize PaddleOCR with custom directories: {str(e)}. Using default directories.")
-    #             # Fallback to default initialization
-    #             self.paddle_ocr = PaddleOCR(use_angle_cls=True, lang="en")
-    #             logger.info("PaddleOCR initialized successfully with default directories")
-                
-    #     except Exception as e:
-    #         logger.error(f"PaddleOCR initialization failed: {str(e)}")
-    #         # Don't raise here - allow the loader to be created but OCR will fail when used
-    #         self.paddle_ocr = None
-
     def _initialize_paddle_ocr(self):
         """Initialize PaddleOCR with better directory handling"""
         try:

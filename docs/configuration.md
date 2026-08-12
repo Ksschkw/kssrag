@@ -25,12 +25,21 @@ OPENROUTER_API_KEY=your_openrouter_api_key_here
 # Model Configuration
 DEFAULT_MODEL=deepseek/deepseek-chat-v3.1:free
 FALLBACK_MODELS=deepseek/deepseek-r1:free,deepseek/deepseek-chat
+# Cross-provider fallback chain: providers tried in order if the primary fails.
+# Each uses its own API key. (Same-provider model fallbacks are FALLBACK_MODELS.)
+# NOTE: env-driven fallbacks use DEFAULT_MODEL for every provider, so only list
+# providers where that model id is valid; use create_llm(fallback_providers=[...])
+# to give each fallback its own model.
+FALLBACK_PROVIDERS=openrouter
 
 # LLM generation parameters
 LLM_TEMPERATURE=0.7
 LLM_MAX_TOKENS=1024
 LLM_TIMEOUT=30
 LLM_STREAM_TIMEOUT=60
+# Retries on HTTP 429 (rate limit) before moving to the next model/provider
+LLM_MAX_RETRIES=3
+LLM_RETRY_BACKOFF=2.0
 
 # Document Processing
 CHUNK_SIZE=500
@@ -128,11 +137,14 @@ KSS RAG talks to any LLM provider through a single `PROVIDER` setting (or the
 | `LLM_BASE_URL` | string | OpenRouter URL | Endpoint override (required for `custom`) |
 | `OPENROUTER_API_KEY` | string | `""` | OpenRouter key / legacy fallback key |
 | `DEFAULT_MODEL` | string | `deepseek/deepseek-chat` | Primary model id |
-| `FALLBACK_MODELS` | List[string] | DeepSeek models | Models to try if the primary fails |
+| `FALLBACK_MODELS` | List[string] | DeepSeek models | Models to try if the primary fails (**same provider only**) |
+| `FALLBACK_PROVIDERS` | List[string] | None | Providers tried in order if the primary provider fails (cross-provider) |
 | `LLM_TEMPERATURE` | float | 0.7 | Sampling temperature (0.0–2.0) |
 | `LLM_MAX_TOKENS` | int | 1024 | Max tokens per response |
 | `LLM_TIMEOUT` | int | 30 | Non-streaming request timeout (s) |
 | `LLM_STREAM_TIMEOUT` | int | 60 | Streaming request timeout (s) |
+| `LLM_MAX_RETRIES` | int | 3 | Retries on HTTP 429 rate limits before trying the next model/provider |
+| `LLM_RETRY_BACKOFF` | float | 2.0 | Base backoff (s) between 429 retries; doubles per attempt unless the server sends `Retry-After` |
 
 **Supported providers:**
 
@@ -146,6 +158,27 @@ KSS RAG talks to any LLM provider through a single `PROVIDER` setting (or the
 **API key resolution order:** explicit `api_key` / `--api-key` → `LLM_API_KEY` →
 the provider's own env var (e.g. `GROQ_API_KEY`) → `OPENROUTER_API_KEY`. Local
 providers need no key.
+
+**Cross-provider fallback:** `FALLBACK_MODELS` only tries other models on the
+*same* provider. To fall back to a different provider (with its own key), set
+`FALLBACK_PROVIDERS` to a comma-separated list of preset names (or pass
+`fallback_providers` to `create_llm` for per-provider model overrides):
+
+```python
+from kssrag import create_llm
+
+llm = create_llm(
+    provider="groq", model="openai/gpt-oss-20b",
+    fallback_providers=[
+        ("openrouter", {"model": "deepseek/deepseek-chat"}),
+        {"provider": "anthropic", "model": "claude-sonnet-4-6"},
+    ],
+)
+```
+
+Fallback providers that aren't configured (no key, unknown preset) are skipped
+with a warning rather than breaking the chain. 429 responses are retried on the
+same model `LLM_MAX_RETRIES` times before the next model/provider is tried.
 
 **From code:**
 
@@ -163,8 +196,8 @@ llm = create_llm(provider="custom",
 
 | Parameter | Type | Default | Range | Description |
 |-----------|------|---------|-------|-------------|
-| `CHUNK_SIZE` | int | 800 | 100-2000 | Characters per chunk |
-| `CHUNK_OVERLAP` | int | 100 | 0-500 | Character overlap between chunks |
+| `CHUNK_SIZE` | int | 500 | 100-2000 | Characters per chunk |
+| `CHUNK_OVERLAP` | int | 50 | 0-500 | Character overlap between chunks |
 | `CHUNKER_TYPE` | enum | `text` | text,json,pdf,image | Document chunking strategy |
 
 **Chunking Best Practices:**

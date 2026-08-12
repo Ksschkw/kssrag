@@ -25,7 +25,7 @@ import requests
 
 from ..utils.helpers import logger
 from ..config import config
-from .base import BaseLLM, LLMError
+from .base import BaseLLM, LLMError, post_with_retry
 
 DEFAULT_ANTHROPIC_URL = "https://api.anthropic.com/v1/messages"
 ANTHROPIC_VERSION = "2023-06-01"
@@ -72,6 +72,8 @@ class AnthropicLLM(BaseLLM):
         max_tokens: Optional[int] = None,
         timeout: Optional[int] = None,
         stream_timeout: Optional[int] = None,
+        max_retries: Optional[int] = None,
+        retry_backoff: Optional[float] = None,
     ):
         self.api_key = api_key if api_key is not None else config.LLM_API_KEY
         self.base_url = base_url or DEFAULT_ANTHROPIC_URL
@@ -82,6 +84,8 @@ class AnthropicLLM(BaseLLM):
         self.max_tokens = max_tokens if max_tokens is not None else config.LLM_MAX_TOKENS
         self.timeout = timeout if timeout is not None else config.LLM_TIMEOUT
         self.stream_timeout = stream_timeout if stream_timeout is not None else config.LLM_STREAM_TIMEOUT
+        self.max_retries = max_retries if max_retries is not None else config.LLM_MAX_RETRIES
+        self.retry_backoff = retry_backoff if retry_backoff is not None else config.LLM_RETRY_BACKOFF
         self.headers = {
             "Content-Type": "application/json",
             "x-api-key": self.api_key or "",
@@ -113,13 +117,14 @@ class AnthropicLLM(BaseLLM):
         for model in self._models_to_try:
             try:
                 logger.info(f"Using Anthropic model: {model}")
-                response = requests.post(
+                response = post_with_retry(
                     self.base_url,
                     headers=self.headers,
                     json=self._payload(model, system, turns, stream=False),
                     timeout=self.timeout,
+                    max_retries=self.max_retries,
+                    backoff=self.retry_backoff,
                 )
-                response.raise_for_status()
                 data = response.json()
                 blocks = data.get("content") or []
                 text = "".join(b.get("text", "") for b in blocks if b.get("type") == "text")
@@ -140,14 +145,15 @@ class AnthropicLLM(BaseLLM):
         for model in self._models_to_try:
             try:
                 logger.info(f"Streaming with Anthropic model: {model}")
-                response = requests.post(
+                response = post_with_retry(
                     self.base_url,
                     headers=self.headers,
                     json=self._payload(model, system, turns, stream=True),
                     timeout=self.stream_timeout,
+                    max_retries=self.max_retries,
+                    backoff=self.retry_backoff,
                     stream=True,
                 )
-                response.raise_for_status()
 
                 for line in response.iter_lines():
                     if not line:

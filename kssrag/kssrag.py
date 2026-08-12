@@ -1,16 +1,14 @@
 """
 Main KSSRAG class that ties everything together for easy usage.
 """
-from typing import Optional, List, Dict, Any
-import os
+from typing import Optional, Dict, Any
 from .core.chunkers import TextChunker, JSONChunker, PDFChunker
 from .core.vectorstores import BM25VectorStore, BM25SVectorStore, FAISSVectorStore, TFIDFVectorStore, HybridVectorStore, HybridOfflineVectorStore
 from .core.retrievers import SimpleRetriever, HybridRetriever
 from .core.agents import RAGAgent
-from .models.openrouter import OpenRouterLLM
 from .models.factory import create_llm
 from .utils.document_loaders import load_document, load_json_documents
-from .config import Config, VectorStoreType, ChunkerType, RetrieverType
+from .config import Config, VectorStoreType, RetrieverType
 from .utils.helpers import logger, validate_config, import_custom_component
 
 class KSSRAG:
@@ -113,7 +111,11 @@ class KSSRAG:
                 entity_names = []
                 if format == 'json':
                     entity_names = [doc['metadata'].get('name', '') for doc in self.documents if doc['metadata'].get('name')]
-                self.retriever = HybridRetriever(self.vector_store, entity_names)
+                self.retriever = HybridRetriever(
+                    self.vector_store,
+                    entity_names,
+                    fuzzy_threshold=self.config.FUZZY_MATCH_THRESHOLD,
+                )
         
         # Create LLM. Building the index shouldn't require an LLM key (retrieval
         # works without one), so a missing-key error is deferred to query time.

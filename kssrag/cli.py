@@ -4,9 +4,8 @@ import os  # Add this import if not already present
 from .utils.document_loaders import load_document, load_json_documents
 from .core.chunkers import ImageChunker, OfficeChunker, TextChunker, JSONChunker, PDFChunker
 from .core.vectorstores import BM25SVectorStore, BM25VectorStore, FAISSVectorStore, TFIDFVectorStore, HybridVectorStore, HybridOfflineVectorStore
-from .core.retrievers import SimpleRetriever, HybridRetriever
+from .core.retrievers import SimpleRetriever
 from .core.agents import RAGAgent
-from .models.openrouter import OpenRouterLLM
 from .models.factory import create_llm
 from .config import config
 from .utils.helpers import logger, validate_config

@@ -16,7 +16,7 @@ import requests
 
 from ..utils.helpers import logger
 from ..config import config
-from .base import BaseLLM, LLMError
+from .base import BaseLLM, LLMError, post_with_retry
 
 
 class OpenAICompatibleLLM(BaseLLM):
@@ -33,6 +33,8 @@ class OpenAICompatibleLLM(BaseLLM):
         max_tokens: Optional[int] = None,
         timeout: Optional[int] = None,
         stream_timeout: Optional[int] = None,
+        max_retries: Optional[int] = None,
+        retry_backoff: Optional[float] = None,
         extra_headers: Optional[Dict[str, str]] = None,
     ):
         self.base_url = base_url or config.LLM_BASE_URL
@@ -44,6 +46,8 @@ class OpenAICompatibleLLM(BaseLLM):
         self.max_tokens = max_tokens if max_tokens is not None else config.LLM_MAX_TOKENS
         self.timeout = timeout if timeout is not None else config.LLM_TIMEOUT
         self.stream_timeout = stream_timeout if stream_timeout is not None else config.LLM_STREAM_TIMEOUT
+        self.max_retries = max_retries if max_retries is not None else config.LLM_MAX_RETRIES
+        self.retry_backoff = retry_backoff if retry_backoff is not None else config.LLM_RETRY_BACKOFF
 
         self.headers = {"Content-Type": "application/json"}
         # Only send Authorization when a key is present; local servers (Ollama,
@@ -78,13 +82,14 @@ class OpenAICompatibleLLM(BaseLLM):
         for model in self._models_to_try:
             try:
                 logger.info(f"Using model: {model}")
-                response = requests.post(
+                response = post_with_retry(
                     self.base_url,
                     headers=self.headers,
                     json=self._payload(model, messages, stream=False),
                     timeout=self.timeout,
+                    max_retries=self.max_retries,
+                    backoff=self.retry_backoff,
                 )
-                response.raise_for_status()
                 response_data = response.json()
 
                 if ("choices" not in response_data or
@@ -123,14 +128,15 @@ class OpenAICompatibleLLM(BaseLLM):
         for model in self._models_to_try:
             try:
                 logger.info(f"Streaming with model: {model}")
-                response = requests.post(
+                response = post_with_retry(
                     self.base_url,
                     headers=self.headers,
                     json=self._payload(model, messages, stream=True),
                     timeout=self.stream_timeout,
+                    max_retries=self.max_retries,
+                    backoff=self.retry_backoff,
                     stream=True,
                 )
-                response.raise_for_status()
 
                 for line in response.iter_lines():
                     if not line:

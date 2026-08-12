@@ -612,13 +612,33 @@ def create_llm(
     model: str | None = None,        # model id (default: config.DEFAULT_MODEL)
     base_url: str | None = None,     # endpoint override (required for "custom")
     api_key: str | None = None,      # key override
-    fallback_models: list[str] | None = None,
+    fallback_models: list[str] | None = None,   # same-provider model fallbacks
+    fallback_providers: list | None = None,     # cross-provider chain (default: config.FALLBACK_PROVIDERS)
     stream: bool = False,
     cfg=None,                        # Config instance to read defaults from
     **kwargs,
 ) -> BaseLLM:
     """Return the adapter for the given provider, resolving base_url and API key."""
 ```
+
+When `fallback_providers` is set (or `FALLBACK_PROVIDERS` is configured), the
+returned object is a `FallbackChainLLM` wrapping the primary adapter plus one
+adapter per fallback provider, tried in order. Entries may be a provider name,
+a `(name, kwargs)` tuple, or a dict with a `provider` key:
+
+```python
+llm = create_llm(
+    provider="groq", model="openai/gpt-oss-20b",
+    fallback_providers=[
+        ("openrouter", {"model": "deepseek/deepseek-chat"}),
+        {"provider": "anthropic", "model": "claude-sonnet-4-6"},
+    ],
+)
+```
+
+Unconfigured fallback providers are skipped with a warning. On HTTP 429 all
+adapters retry the same model (`LLM_MAX_RETRIES`, `LLM_RETRY_BACKOFF`) before
+trying the next fallback.
 
 ### Adapters
 
@@ -628,6 +648,7 @@ def create_llm(
 | `AnthropicLLM` | Anthropic Messages API (`/v1/messages`) |
 | `OllamaLLM` | Native Ollama (`/api/chat`) |
 | `OpenRouterLLM` | Backward-compatible OpenRouter preset |
+| `FallbackChainLLM` | Tries multiple provider adapters in order (cross-provider fallback) |
 | `MockLLM` | Deterministic offline mock for tests |
 
 ```python

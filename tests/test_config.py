@@ -40,3 +40,14 @@ def test_config_environment_variables():
     # Cleanup
     del os.environ["OCR_DEFAULT_MODE"]
     del os.environ["ENABLE_STREAMING"]
+
+
+def test_comma_separated_env_lists(monkeypatch):
+    """Regression: comma-separated env vars must not crash Config() (pydantic-settings JSON decoding)"""
+    monkeypatch.setenv("CORS_ALLOW_METHODS", "GET,POST")
+    monkeypatch.setenv("FALLBACK_PROVIDERS", "ollama, anthropic")
+    
+    config = Config()
+    
+    assert config.CORS_ALLOW_METHODS == ["GET", "POST"]
+    assert config.FALLBACK_PROVIDERS == ["ollama", "anthropic"]

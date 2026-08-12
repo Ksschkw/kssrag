@@ -106,12 +106,7 @@ class BM25VectorStore(BaseVectorStore):
             logger.info(f"BM25 index loaded from {self.persist_path}")
 
 import tempfile
-# class FAISSVectorStore(BaseVectorStore):
-#     def __init__(self, persist_path: Optional[str] = None, model_name: Optional[str] = None):
-#         if not FAISS_AVAILABLE:
-#             raise ImportError("FAISS is not available. Please install it with 'pip install faiss-cpu' or use a different vector store.")
-#         super().__init__(persist_path)
-#         self.model_name = model_name or config.FAISS_MODEL_NAME
+
 class FAISSVectorStore(BaseVectorStore):
     def __init__(self, persist_path: Optional[str] = None, model_name: Optional[str] = None):
         # Only setup FAISS when this vector store is actually used

@@ -1,7 +1,7 @@
 import time
 from typing import Generator, List, Dict, Any, Optional
 from ..utils.helpers import logger
-from ..models.openrouter import LLMError
+from ..models.base import LLMError
 
 class RAGAgent:
     """RAG agent implementation with discrete conversation summaries"""
@@ -23,14 +23,6 @@ class RAGAgent:
         if not any(msg.get("role") == "system" for msg in self.conversation):
             self.add_message("system", self.system_prompt)
     
-    # def add_message(self, role: str, content: str):
-    #     """Add a message to the conversation history"""
-    #     self.conversation.append({"role": role, "content": content})
-        
-    #     # Keep conversation manageable (last 15 messages)
-    #     if len(self.conversation) > 15:
-    #         self._smart_trim_conversation()
-
     def add_message(self, role: str, content: str):
         """Add a message to the conversation history (with simple dedupe for assistant)."""
         content = content.strip()
@@ -309,53 +301,6 @@ class RAGAgent:
             logger.error(f" ALL STREAMING STRATEGIES FAILED: {str(e)}")
             yield f"Error: {str(e)}"
 
-    # def _stream_with_summary_protection(self, question: str, top_k: int) -> Generator[str, None, None]:
-    #     """Streaming-safe: never leak summary markers mid-stream."""
-    #     relevant_docs = self.retriever.retrieve(question, top_k=top_k)
-    #     context = self._build_context(relevant_docs)
-    #     messages = self._build_messages(question, context)
-
-    #     buffer = ""
-    #     summary_buffer = ""
-    #     in_summary = False
-
-    #     for chunk in self.llm.predict_stream(messages):
-    #         buffer += chunk
-
-    #         # Detect summary start
-    #         if '[SUMMARY_START]' in buffer:
-    #             in_summary = True
-    #             clean_part = buffer.split('[SUMMARY_START]')[0].strip()
-    #             if clean_part:
-    #                 yield clean_part
-    #             summary_buffer = buffer.split('[SUMMARY_START]')[1]
-    #             buffer = ""
-    #             continue
-
-    #         if in_summary:
-    #             summary_buffer += chunk
-    #             if '[SUMMARY_END]' in summary_buffer:
-    #                 in_summary = False
-    #                 summary_content = summary_buffer.split('[SUMMARY_END]')[0].strip()
-    #                 if summary_content:
-    #                     self._add_conversation_summary(summary_content)
-    #                     logger.info(f"Summary extracted in stream: '{summary_content}'")
-    #                 buffer = summary_buffer.split('[SUMMARY_END]')[1]  # remainder
-    #                 summary_buffer = ""
-    #                 if buffer:
-    #                     yield buffer.strip()
-    #                 buffer = ""
-    #             continue
-
-    #         if not in_summary:
-    #             yield chunk
-
-    #     # Flush leftover buffer
-    #     if buffer.strip() and not in_summary:
-    #         yield buffer.strip()
-    #     elif in_summary:
-    #         logger.info("Leftover buffer contains partial summary – discarded to prevent marker leak")
-
     def _stream_with_summary_protection(self, question: str, top_k: int) -> Generator[str, None, None]:
         """Token-only streaming. Never reconstruct or re-emit content."""
         relevant_docs = self.retriever.retrieve(question, top_k=top_k)
@@ -441,14 +386,6 @@ class RAGAgent:
             time.sleep(0.02)
 
 
-    def _extract_clean_content(self, buffer: str) -> str:
-        """Extract clean content before any summary markers"""
-        markers = ['[SUMMARY_START]', '[SUMMARY', 'SUMMARY_']
-        for marker in markers:
-            if marker in buffer:
-                return buffer.split(marker)[0].strip()
-        return buffer.strip()
-    
     def clear_conversation(self):
         """Clear conversation history except system message and summaries"""
         system_msg = next((msg for msg in self.conversation if msg["role"] == "system"), None)
