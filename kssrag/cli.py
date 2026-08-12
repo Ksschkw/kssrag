@@ -1,6 +1,7 @@
 import argparse
 import sys
 import os  # Add this import if not already present
+from typing import Optional
 from .utils.document_loaders import load_document, load_json_documents
 from .core.chunkers import ImageChunker, OfficeChunker, TextChunker, JSONChunker, PDFChunker
 from .core.vectorstores import BM25SVectorStore, BM25VectorStore, FAISSVectorStore, TFIDFVectorStore, HybridVectorStore, HybridOfflineVectorStore
@@ -9,6 +10,31 @@ from .core.agents import RAGAgent
 from .models.factory import create_llm
 from .config import config
 from .utils.helpers import logger, validate_config
+
+def load_system_prompt(prompt_arg: Optional[str]) -> Optional[str]:
+    """Load a system prompt from a file, or use the argument as literal text.
+
+    Returns None when no prompt is given. When ``prompt_arg`` looks like a file
+    path (starts with '/', './', '../', '~' or ends with a text extension) but
+    the file does not exist, a loud warning is logged — historically a mistyped
+    mount path silently became the prompt text itself, which is never intended.
+    """
+    if not prompt_arg:
+        return None
+    if os.path.exists(prompt_arg):
+        with open(prompt_arg, 'r', encoding='utf-8') as f:
+            return f.read()
+    looks_like_path = (
+        prompt_arg.startswith(("/", "./", "../", "~"))
+        or prompt_arg.lower().endswith((".txt", ".md", ".prompt", ".json"))
+    )
+    if looks_like_path:
+        logger.warning(
+            f"System prompt file not found: '{prompt_arg}'. Falling back to using "
+            "the argument as literal prompt text — check that --system-prompt "
+            "points to a real file (e.g. /run/secrets/custom_prompt.txt)."
+        )
+    return prompt_arg
 
 def main():
     """Command-line interface for KSS RAG"""
@@ -62,16 +88,6 @@ def main():
     
     # Validate config
     validate_config()
-    
-    def load_system_prompt(prompt_arg):
-        """Load system prompt from file or use as text"""
-        if not prompt_arg:
-            return None
-        if os.path.exists(prompt_arg):
-            with open(prompt_arg, 'r', encoding='utf-8') as f:
-                return f.read()
-        return prompt_arg
-        
     
     if args.command == "query":
         # Load and process document

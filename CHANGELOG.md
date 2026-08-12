@@ -5,6 +5,16 @@ All notable changes to this project are documented here.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased]
+
+### Fixed
+
+- **Missing `--system-prompt` files now warn loudly.** The CLI previously
+  treated a nonexistent prompt path as literal prompt text, so a mistyped mount
+  path (e.g. `/secrets/...` instead of `/run/secrets/...`) silently became the
+  system prompt and persona instructions never reached the model. Now a
+  path-like argument that doesn't exist logs a `WARNING` explaining the fallback.
+
 ## [0.3.1] - 2026-08-12
 
 Reliability release: cross-provider LLM fallback, rate-limit retries, and a
