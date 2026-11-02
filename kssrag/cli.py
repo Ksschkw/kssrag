@@ -10,6 +10,7 @@ from .core.agents import RAGAgent
 from .models.factory import create_llm
 from .config import config
 from .utils.helpers import logger, validate_config
+from .services.deployment_service import DeploymentService
 
 def load_system_prompt(prompt_arg: Optional[str]) -> Optional[str]:
     """Load a system prompt from a file, or use the argument as literal text.
@@ -89,7 +90,24 @@ def main():
     server_parser.add_argument("--base-url", type=str, default=None, help="Override the provider's chat endpoint URL")
     server_parser.add_argument("--api-key", type=str, default=None, help="API key (overrides env-var resolution)")
 
+    # Deploy command: writes container deployment files
+    deploy_parser = subparsers.add_parser("deploy", help="Write a Dockerfile and compose file for this service")
+    deploy_parser.add_argument("--dir", type=str, default=".", help="Directory to write the deployment files into")
+    deploy_parser.add_argument("--force", action="store_true", help="Overwrite files that already exist")
+
     args = parser.parse_args()
+
+    if args.command == "deploy":
+        result = DeploymentService().scaffold(args.dir, overwrite=args.force)
+        for name in result.written:
+            print(f"[OK] wrote {name}")
+        for name in result.skipped:
+            print(f"[SKIP] {name} already exists (use --force to overwrite)")
+        if result.written:
+            print("\nNext: put your document in knowledge/, write prompt.txt, fill .env, then run:")
+            print("  docker compose up --build")
+        return 0
+
     vector_store_type = args.vector_store if hasattr(args, 'vector_store') else config.VECTOR_STORE_TYPE
     
     # Validate config
