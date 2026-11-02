@@ -11,3 +11,11 @@ setup.py
 *E.md
 .coverage
 htmlcov
+REVAMP_BREAKDOWN.md
+revamp_breakdown.md
+.revamp-breakdown.md
+REVAMP_EXPLANATION.md
+revamp_explanation.md
+DETAILED_EXPLANATION.md
+detailed_explanation.md
+.~lock.*#

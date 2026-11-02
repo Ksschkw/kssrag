@@ -4,93 +4,79 @@ from typing import List, Dict, Any, Optional
 from ..utils.helpers import logger
 
 def load_txt_file(file_path: str) -> str:
-    """Load text from a file"""
-    try:
-        with open(file_path, 'r', encoding='utf-8') as f:
-            return f.read()
-    except Exception as e:
-        logger.error(f"Failed to load text file: {str(e)}")
-        raise
+    """Load text from a file."""
+    with open(file_path, 'r', encoding='utf-8') as f:
+        return f.read()
 
 def load_json_file(file_path: str) -> Any:
-    """Load JSON from a file"""
-    try:
-        with open(file_path, 'r', encoding='utf-8') as f:
-            return json.load(f)
-    except Exception as e:
-        logger.error(f"Failed to load JSON file: {str(e)}")
-        raise
+    """Load JSON from a file."""
+    with open(file_path, 'r', encoding='utf-8') as f:
+        return json.load(f)
 
 def load_docx_file(file_path: str) -> str:
-    """Load text from DOCX file"""
+    """Load text from DOCX file."""
     try:
         from docx import Document
-        doc = Document(file_path)
-        text = ""
-        for paragraph in doc.paragraphs:
-            if paragraph.text.strip():
-                text += paragraph.text + "\n"
-        
-        # Extract text from tables
-        for table in doc.tables:
-            for row in table.rows:
-                for cell in row.cells:
-                    if cell.text.strip():
-                        text += cell.text + "\n"
-        
-        return text.strip()
     except ImportError:
         raise ImportError("python-docx is required for DOCX support. Install with: pip install kssrag[office]")
-    except Exception as e:
-        logger.error(f"Failed to load DOCX file: {str(e)}")
-        raise
+
+    doc = Document(file_path)
+    text = ""
+    for paragraph in doc.paragraphs:
+        if paragraph.text.strip():
+            text += paragraph.text + "\n"
+
+    # Extract text from tables
+    for table in doc.tables:
+        for row in table.rows:
+            for cell in row.cells:
+                if cell.text.strip():
+                    text += cell.text + "\n"
+
+    return text.strip()
 
 def load_excel_file(file_path: str) -> str:
-    """Load text from Excel file"""
+    """Load text from Excel file."""
     try:
         import openpyxl
-        workbook = openpyxl.load_workbook(file_path)
-        text = ""
-        
-        for sheet_name in workbook.sheetnames:
-            sheet = workbook[sheet_name]
-            text += f"Sheet: {sheet_name}\n"
-            
-            for row in sheet.iter_rows(values_only=True):
-                row_text = " | ".join(str(cell) if cell is not None else "" for cell in row)
-                if row_text.strip():
-                    text += row_text + "\n"
-            text += "\n"
-        
-        return text.strip()
     except ImportError:
         raise ImportError("openpyxl is required for Excel support. Install with: pip install kssrag[office]")
-    except Exception as e:
-        logger.error(f"Failed to load Excel file: {str(e)}")
-        raise
+
+    workbook = openpyxl.load_workbook(file_path)
+    text = ""
+
+    for sheet_name in workbook.sheetnames:
+        sheet = workbook[sheet_name]
+        text += f"Sheet: {sheet_name}\n"
+
+        for row in sheet.iter_rows(values_only=True):
+            row_text = " | ".join(str(cell) if cell is not None else "" for cell in row)
+            if row_text.strip():
+                text += row_text + "\n"
+        text += "\n"
+
+    return text.strip()
 
 def load_pptx_file(file_path: str) -> str:
-    """Load text from PowerPoint file"""
+    """Load text from PowerPoint file."""
     try:
         from pptx import Presentation
-        prs = Presentation(file_path)
-        text = ""
-        
-        for slide_number, slide in enumerate(prs.slides, 1):
-            text += f"Slide {slide_number}:\n"
-            
-            for shape in slide.shapes:
-                if hasattr(shape, "text") and shape.text.strip():
-                    text += shape.text + "\n"
-            
-            text += "\n"
-        
-        return text.strip()
     except ImportError:
         raise ImportError("python-pptx is required for PowerPoint support. Install with: pip install kssrag[office]")
-    except Exception as e:
-        logger.error(f"Failed to load PowerPoint file: {str(e)}")
-        raise
+
+    prs = Presentation(file_path)
+    text = ""
+
+    for slide_number, slide in enumerate(prs.slides, 1):
+        text += f"Slide {slide_number}:\n"
+
+        for shape in slide.shapes:
+            if hasattr(shape, "text") and shape.text.strip():
+                text += shape.text + "\n"
+
+        text += "\n"
+
+    return text.strip()
 
 def load_document(file_path: str) -> str:
     """Load document from file with auto-format detection"""

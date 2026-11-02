@@ -157,11 +157,6 @@ def main():
         system_prompt = load_system_prompt(args.system_prompt)
         agent = RAGAgent(retriever, llm, system_prompt=system_prompt)
         
-        # Query and print response
-        # response = agent.query(args.query, top_k=args.top_k)
-        # print(f"Query: {args.query}")
-        # print(f"Response: {response}")
-
         # In the query section, after creating the agent:
         if args.stream:
             print(f"Query: {args.query}")

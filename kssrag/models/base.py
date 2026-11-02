@@ -17,6 +17,9 @@ from typing import Generator, List, Dict
 import requests
 
 from ..utils.helpers import logger
+from ..core.errors import LLMError
+
+__all__ = ["BaseLLM", "LLMError", "post_with_retry"]
 
 
 def _retry_after_seconds(resp, backoff: float, attempt: int, cap: float = 60.0) -> float:
@@ -29,8 +32,9 @@ def _retry_after_seconds(resp, backoff: float, attempt: int, cap: float = 60.0) 
     reset = resp.headers.get("x-ratelimit-reset-tokens") or resp.headers.get("x-ratelimit-reset")
     if reset and reset.isdigit():
         return min(max(float(reset) - time.time(), 0.0), cap)
-    # Exponential backoff as a fallback.
-    return min(backoff * (2 ** attempt), cap)
+    # Exponential backoff with randomized jitter as a fallback (§7)
+    from ..core.resilience import calculate_jittered_backoff
+    return calculate_jittered_backoff(attempt=attempt, base=backoff, cap=cap)
 
 
 def post_with_retry(url, *, headers, json, timeout, max_retries: int, backoff: float, stream: bool = False):
@@ -58,10 +62,6 @@ def post_with_retry(url, *, headers, json, timeout, max_retries: int, backoff: f
         break
     resp.raise_for_status()
     return resp
-
-
-class LLMError(RuntimeError):
-    """Raised when an LLM adapter cannot produce a response (all models failed)."""
 
 
 class BaseLLM:

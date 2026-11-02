@@ -14,8 +14,14 @@ except ImportError as e:
         "Install with: pip install kssrag[ocr]"
     ) from e
 
-# Initialize PaddleOCR (handwritten text)
-_paddle_ocr = PaddleOCR(use_angle_cls=True, lang="en")
+# Lazy initialization of PaddleOCR to avoid module-level singleton (§2)
+_paddle_ocr_instance = None
+
+def _get_paddle_ocr():
+    global _paddle_ocr_instance
+    if _paddle_ocr_instance is None:
+        _paddle_ocr_instance = PaddleOCR(use_angle_cls=True, lang="en")
+    return _paddle_ocr_instance
 
 
 def ocr_tesseract(image_path: str) -> str:
@@ -27,7 +33,8 @@ def ocr_tesseract(image_path: str) -> str:
 
 def ocr_paddle(image_path: str) -> str:
     """OCR for handwritten text using PaddleOCR."""
-    results = _paddle_ocr.ocr(image_path, cls=True)
+    ocr_engine = _get_paddle_ocr()
+    results = ocr_engine.ocr(image_path, cls=True)
     text = ""
     for line in results:
         for _, (txt, _) in line:

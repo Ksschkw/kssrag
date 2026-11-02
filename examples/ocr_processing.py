@@ -32,10 +32,10 @@ def main():
             
             # Load and process image
             rag.load_document(image_path, format="image")
-            print(f"✓ Successfully processed {image_path}")
+            print(f"[OK] Successfully processed {image_path}")
             
         except Exception as e:
-            print(f"✗ Failed to process {image_path}: {str(e)}")
+            print(f"[FAIL] Failed to process {image_path}: {str(e)}")
     
     # Query across all processed images
     print("\nQuerying processed documents...")

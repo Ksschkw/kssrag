@@ -1,7 +1,7 @@
 import time
 from typing import Generator, List, Dict, Any, Optional
 from ..utils.helpers import logger
-from ..models.base import LLMError
+from .errors import LLMError
 
 class RAGAgent:
     """RAG agent implementation with discrete conversation summaries"""
