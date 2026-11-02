@@ -1,0 +1,32 @@
+# Pinned Architecture Decisions
+# Format required by house-standard.md §3
+
+layers:
+  entities: "models/entities"
+  schemas: "schemas"
+  crud: "crud"
+  services: "services"
+  routers: "routers"
+  core: "core"
+  middleware: "middleware"
+
+conventions:
+  file_extension: ".py"
+  casing: "snake_case"
+  composition_root: "kssrag/core/container.py"
+  architecture_check_command: "python arch-check.py"
+  strict_uniform_casing: false
+
+# Names banned by house-standard.md section 4 that already exist in the
+# published package. Each entry is a deliberate, recorded exception: renaming
+# these would break the public import surface (`from kssrag.utils import ...`).
+# The check still rejects any new banned name anywhere in the package.
+banned_name_exemptions:
+  - kssrag/utils
+  - kssrag/utils/helpers.py
+
+framework_directories:
+  - directory: "kssrag"
+    purpose: "Top-level Python package directory preserving PyPI distribution and import compatibility"
+  - directory: "tests"
+    purpose: "Test suite directory mirroring package layers"

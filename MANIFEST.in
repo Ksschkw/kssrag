@@ -1,0 +1,7 @@
+# The sdist ships the test suite, and the standards tests execute arch-check.py,
+# which reads .architecture for its recorded exemptions. Both must therefore be
+# inside the sdist or those tests fail for anyone building from source.
+include arch-check.py
+include .architecture
+include CHANGELOG.md
+include LICENSE
