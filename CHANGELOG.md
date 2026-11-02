@@ -5,6 +5,21 @@ All notable changes to this project are documented here.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.4.2] - 2026-11-02
+
+### Added
+
+- `kssrag deploy` writes a Dockerfile, `.dockerignore`, `docker-compose.yml`,
+  and `.env.example` into a directory, ready for `docker compose up --build`.
+
+  The generated image installs the base package instead of a requirements file,
+  runs as a non-root user, exposes a healthcheck against `/health`, and uses
+  exec-form `CMD` so the server receives `SIGTERM`. Documents and prompts are
+  mounted read-only at run time rather than copied, so they never enter an
+  image layer.
+
+  Existing files are skipped; pass `--force` to overwrite.
+
 ## [0.4.1] - 2026-11-02
 
 Internal restructure onto the layered architecture, plus two operational fixes.

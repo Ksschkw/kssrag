@@ -20,7 +20,7 @@ from .config import Config, VectorStoreType, ChunkerType, RetrieverType
 from .server import create_app, ServerConfig
 from .cli import main
 
-__version__ = "0.4.1"
+__version__ = "0.4.2"
 __author__ = "Ksschkw"
 __license__ = "MIT"
 
