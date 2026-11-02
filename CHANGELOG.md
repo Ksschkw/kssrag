@@ -5,6 +5,61 @@ All notable changes to this project are documented here.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.4.1] - 2026-11-02
+
+Internal restructure onto the layered architecture, plus two operational fixes.
+The HTTP surface is unchanged: same routes, same request and response shapes,
+same retrieval and chunking behaviour. Verified by comparing against 0.4.0 with
+a behavioural fingerprint covering every endpoint and every offline vector
+store.
+
+### Added
+
+- Layered package structure: `models/entities`, `schemas`, `crud`, `services`,
+  `routers`, `middleware`, with `core` as the foundation. Imports point inward
+  only.
+- Typed error hierarchy in `core/errors` with correlation IDs, internal and
+  external views, and one user-facing rendering per domain error.
+- Correlation middleware: `X-Correlation-ID` is read from the request or
+  generated, propagated to responses, and attached to logs.
+- Security headers on every response: HSTS, CSP, X-Content-Type-Options,
+  X-Frame-Options, Referrer-Policy.
+- Rate limiting on all endpoints except `/`, `/health`, `/docs`, `/openapi.json`
+  and `/redoc`. Returns 429 with `Retry-After`.
+- Circuit breaker, bulkhead, and jittered retry primitives in `core/resilience`.
+- `arch-check.py`, which enforces the layered import rules, banned names, the
+  emoji ban, and banned user-facing phrases. It runs inside the default test
+  command.
+
+### Changed
+
+- `CORS_ALLOW_CREDENTIALS` now defaults to `false`. Wildcard origins combined
+  with credentials are rejected. Set it back to `true` explicitly only with an
+  explicit origin allowlist.
+- `Retry-After` on a 429 is computed from the window instead of being fixed at
+  10 seconds.
+- Session state and query orchestration now live in `services/` and `crud/`
+  instead of inside `server.py`. `create_app` is a composition root only.
+- `LLMError` is defined in `core/errors` and re-exported from `models/base`.
+  `from kssrag.models.base import LLMError` still works.
+
+### Fixed
+
+- The rate limiter no longer grows without bound. Previously every client
+  address that ever made a request stayed in memory for the life of the
+  process. The number of tracked clients is now capped and the least recently
+  used is evicted.
+- The rate limiter can read `X-Forwarded-For` when deployed behind a proxy.
+  It is off by default (`TRUST_FORWARDED_FOR=false`); behind a load balancer
+  without it, every client shared a single bucket.
+- The distribution includes `arch-check.py` and `.architecture`, so the test
+  suite passes when built from the sdist.
+
+### Removed
+
+- The module-level `Container` singleton. Dependencies are injected by
+  `create_app`.
+
 ## [0.4.0] - 2026-08-12
 
 Feature release: sentence-aware chunking, metadata filtering, an

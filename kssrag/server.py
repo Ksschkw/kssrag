@@ -40,7 +40,7 @@ class ServerConfig(BaseModel):
     cors_allow_headers: List[str] = config.CORS_ALLOW_HEADERS
     title: str = "KSSSwagger"
     description: str = "[kssrag](https://github.com/Ksschkw/kssrag)"
-    version: str = "0.4.0"
+    version: str = "0.4.1"
 
 
 def create_app(rag_agent: RAGAgent, server_config: Optional[ServerConfig] = None):
