@@ -74,9 +74,38 @@ curl -X POST http://localhost:8000/stream \
 
 `--system-prompt` accepts either an inline string or a path to a prompt file.
 
+### Deploy it in a container
+
+Generate the container files instead of writing them by hand:
+
+```bash
+kssrag deploy --dir my-app
+cd my-app
+```
+
+That writes four files: `Dockerfile`, `.dockerignore`, `docker-compose.yml`, and
+`.env.example`. Put your document in `knowledge/`, write `prompt.txt`, fill in
+`.env`, then:
+
+```bash
+docker compose up --build
+```
+
+The generated image installs the base package only — no torch, no FAISS, no OCR
+stack. If you pick a semantic store, add the extra you need on the `pip install`
+line (`kssrag[faiss]`) and expect a much larger image.
+
+Documents and the system prompt are mounted read-only at run time rather than
+copied in, so they never enter an image layer or the build history. The
+container runs as a non-root user, healthchecks `/health`, and uses exec-form
+`CMD` so it receives `SIGTERM` on shutdown.
+
+Existing files are left alone; pass `--force` to overwrite them.
+
 ## CLI
 
-Two subcommands: `query` (one-shot) and `server` (persistent API).
+Three subcommands: `query` (one-shot), `server` (persistent API), and `deploy`
+(container scaffolding).
 
 ```bash
 # One-shot query with streaming output
